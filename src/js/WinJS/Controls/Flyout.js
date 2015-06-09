@@ -813,16 +813,17 @@ define([
                     }
                 },
 
-                // This determines our positioning.  We have 8 modes, the 1st five are explicit, the last 4 are automatic:
+                // This determines our positioning.  We have 9 modes, the 1st five are explicit, the last 4 are automatic:
                 // * top - position explicitly on the top of the anchor, shrinking and adding scrollbar as needed.
                 // * bottom - position explicitly below the anchor, shrinking and adding scrollbar as needed.
                 // * left - position left of the anchor, shrinking and adding a vertical scrollbar as needed.
                 // * right - position right of the anchor, shrinking and adding a vertical scroolbar as needed.
-                // * cartesian - TODO
+                // * cartesian - Top left corner of the Flyout border box is rendered at the specified pointerEventObj
+                //   or any object in the form of {x, y}.
                 // * auto - Automatic placement.
                 // * autohorizontal - Automatic placement (only left or right).
                 // * autovertical - Automatic placement (only top or bottom).
-                // * _cascasde - Private placement used by MenuCommand._activateFlyoutCommand
+                // * _cascade - Private placement used by MenuCommand._activateFlyoutCommand
                 // Auto tests the height of the anchor and the flyout.  For consistency in orientation, we imagine
                 // that the anchor is placed in the vertical center of the display.  If the flyout would fit above
                 // that centered anchor, then we will place the flyout vertically in relation to the anchor, otherwise
