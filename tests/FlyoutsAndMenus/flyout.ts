@@ -653,32 +653,36 @@ module CorsicaTests {
             var overrunBottomLeft = { x: -2, y: window.innerHeight };
             var overrunBottomRight = { x: window.innerWidth, y: window.innerHeight };
 
+            var msg = "Top left boundary: ";
             asyncShowAt(flyout, overrunTopLeft)
                 .then(() => {
                     marginBox = getLocation(flyout);
-                    Helper.Assert.areFloatsEqual(0, marginBox.left, "top left", 1);
-                    Helper.Assert.areFloatsEqual(0, marginBox.top, "top left", 1);
+                    Helper.Assert.areFloatsEqual(0, marginBox.left, msg + "flyout should not overrun left edge", 1);
+                    Helper.Assert.areFloatsEqual(0, marginBox.top, msg + "flyout should not overrun top edge", 1);
 
+                    msg = "Top right boundary: ";
                     return asyncShowAt(flyout, overrunTopRight);
                 })
                 .then(() => {
                     marginBox = getLocation(flyout);
-                    Helper.Assert.areFloatsEqual(window.innerWidth, marginBox.right, "top right", 1);
-                    Helper.Assert.areFloatsEqual(0, marginBox.top, "top right", 1);
+                    Helper.Assert.areFloatsEqual(window.innerWidth, marginBox.right, msg + "flyout should not overrun right edge", 1);
+                    Helper.Assert.areFloatsEqual(0, marginBox.top, msg + "flyout should not overrun top edge", 1);
 
+                    msg = "Bottom left boundary: ";
                     return asyncShowAt(flyout, overrunBottomLeft)
                 })
                 .then(() => {
                     marginBox = getLocation(flyout);
-                    Helper.Assert.areFloatsEqual(0, marginBox.left, "bottom left", 1);
-                    Helper.Assert.areFloatsEqual(window.innerHeight, marginBox.bottom, "bottom left", 1);
+                    Helper.Assert.areFloatsEqual(0, marginBox.left, msg + "flyout should not overrun left edge", 1);
+                    Helper.Assert.areFloatsEqual(window.innerHeight, marginBox.bottom, msg + "flyout should not overrun bottom edge", 1);
 
+                    msg = "Bottom right boundary: ";
                     return asyncShowAt(flyout, overrunBottomRight)
                 })
                 .done(() => {
                     marginBox = getLocation(flyout);
-                    Helper.Assert.areFloatsEqual(window.innerWidth, marginBox.right, "bottom right", 1);
-                    Helper.Assert.areFloatsEqual(window.innerHeight, marginBox.bottom, "bottom right", 1);
+                    Helper.Assert.areFloatsEqual(window.innerWidth, marginBox.right, msg + "flyout should not overrun right edge", 1);
+                    Helper.Assert.areFloatsEqual(window.innerHeight, marginBox.bottom, msg + "flyout should not overrun bottom edge", 1);
 
                     complete();
                 });
