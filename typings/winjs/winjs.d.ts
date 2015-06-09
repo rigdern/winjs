@@ -6861,6 +6861,19 @@ declare module WinJS.UI {
         show(anchor: HTMLElement, placement?: string, alignment?: string): void;
 
         /**
+         * Shows the Menu, if hidden, regardless of other states, top and left aligned at the specified coordinates,
+         * @param coordinates Required. The point where the top left corner of the Menu will appear, relative to the top and left edge of the visual viewport.
+        **/
+        showAt(coordinates: { x: number; y: number; }): void;
+
+        /**
+         * Shows the Menu, if hidden, regardless of other states, top and left aligned at the location of pointer event object,
+         * @param pointerEventObj Required. The PointerEvent Object specifying where to show the Menu.
+        **/
+        showAt(pointerEventObj: PointerEvent): void;
+
+
+        /**
          * Shows the specified commands of the Menu.
          * @param commands The commands to show. The array elements may be Menu objects, or the string identifiers (IDs) of commands.
          * @param immediate The parameter immediate is not supported and may be altered or unavailable in the future. true to show the commands immediately, without animating them; otherwise, false.
