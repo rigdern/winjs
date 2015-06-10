@@ -31,8 +31,8 @@
         @borderColor: ButtonText;
         @textColor: ButtonText;
         @textColorDisabled: GrayText;
-        @textColorActive: ButtonFace;
-        @textColorSelected: ButtonFace;
+        @textColorActive: ButtonText;
+        @textColorSelected: ButtonText;
         @textColorHover: HighlightText;
         @separatorBackgroundColor: ButtonText;
         @appbarBackgroundColor: ButtonFace;
@@ -40,7 +40,7 @@
         @commandHoverBackgroundColor: Highlight;
         @commandActiveBackgroundColor: Highlight;
         @flyoutBackgroundColor: ButtonFace;
-        @menuCommandActiveBackgroundColor: ButtonText;
+        @menuCommandActiveBackgroundColor: Highlight;
         @menuCommandHoverBackgroundColor: Highlight;
         @menuCommandDisabledColor: GrayText;
         @settingsFlyoutBackgroundColor: ButtonFace;
@@ -303,7 +303,6 @@
             opacity: @accentColorActiveOpacity;
         }
     }
-
     /*@media (-ms-high-contrast) {
     }*/
 }
@@ -320,7 +319,8 @@
     #win-overlay > .stylesForTheme(highcontrast);
 
     button[aria-checked=true].win-command:before {
-        background-color: @commandHoverBackgroundColor;
+        border-color: @commandActiveBackgroundColor;
+        background-color: @commandActiveBackgroundColor;
     }
 }
 
