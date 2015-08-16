@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.  All Rights Reserved. Licensed under the MIT License. See License.txt in the project root for license information.
 /// <reference path="../../Core.d.ts" />
+import _AnimatedList = require("./_AnimatedList");
 import Animations = require("../../Animations");
 import _Base = require("../../Core/_Base");
 import _BaseUtils = require("../../Core/_BaseUtils");
@@ -49,48 +50,8 @@ interface IFocusableElementsInfo {
 }
 
 interface IDataChangeInfo {
-    // 'hidden' refers to the command.hidden property set to true,
-    // 'shown' refers to the command.hidden property set to false.
-
-    /*
-     * Command elements that are in the DOM after the data change.
-     */
-    nextElements: HTMLElement[];
-
-    /*
-     * Command elements that were in the DOM before the data change.
-     */
-    prevElements: HTMLElement[];
-
-    /*
-     * Command elements that were not in the DOM before the data change but are in the DOM after the data change.
-     */
-    added: HTMLElement[];
-
-    /*
-     * Command elements that are not in the DOM after the data change.
-     */
-    deleted: HTMLElement[];
-
-    /*
-     * Command elements that are overflown after the data change.
-     */
-    overflown: HTMLElement[];
-
-    /*
-     * Command elements that were in the DOM before data change and are still in the DOM after the data change.
-     */
-    unchanged: HTMLElement[];
-
-    /*
-     * Command elements that were shown before but hidden after data change.
-     */
-    hiding: HTMLElement[];
-
-    /*
-     * Command elements that were hidden before but shown after the data change.
-     */
-    showing: HTMLElement[];
+    added: _Command.ICommand[];
+    deleted: _Command.ICommand[];
 }
 
 
@@ -148,7 +109,7 @@ function removeClass(element: HTMLElement, className: string): void {
     className && _ElementUtilities.removeClass(element, className);
 }
 
-function diffElements(lhs: Array<HTMLElement>, rhs: Array<HTMLElement>): Array<HTMLElement> {
+function diffElements<T>(lhs: Array<T>, rhs: Array<T>): Array<T> {
     // Subtract array rhs from array lhs.
     // Returns a new Array containing the subset of elements in lhs that are not also in rhs.
     return lhs.filter((commandElement) => { return rhs.indexOf(commandElement) < 0 })
@@ -161,7 +122,8 @@ function intersectElements(arr1: HTMLElement[], arr2: HTMLElement[]): HTMLElemen
 
 /// Represents an apaptive surface for displaying commands.
 export class _CommandingSurface {
-
+    
+    private _actionArea: _AnimatedList.AnimatedList;
     private _id: string;
     private _contentFlyout: _Flyout.Flyout;
     private _contentFlyoutInterior: HTMLElement; /* The reparented content node inside of _contentFlyout.element */
@@ -631,6 +593,8 @@ export class _CommandingSurface {
             firstTabStop: firstTabStop,
             finalTabStop: finalTabStop,
         };
+        
+        this._actionArea = new _AnimatedList.AnimatedList(this._dom.actionArea);
     }
 
     private _getFocusableElementsInfo(): IFocusableElementsInfo {
@@ -711,9 +675,7 @@ export class _CommandingSurface {
         if (element) {
             var command = element["winControl"];
             if (command) {
-                focusable = !this._hasAnyHiddenClasses(command) &&
                 command.type !== _Constants.typeSeparator &&
-                !command.hidden &&
                 !command.disabled &&
                 (!command.firstElementFocus || command.firstElementFocus.tabIndex >= 0 || command.lastElementFocus.tabIndex >= 0);
             } else {
@@ -724,23 +686,6 @@ export class _CommandingSurface {
             }
         }
         return focusable;
-    }
-
-    private _clearHiddenPolicyClasses(command: _Command.ICommand) {
-        _ElementUtilities.removeClass(command.element, _Constants.ClassNames.commandPrimaryOverflownPolicyClass);
-        _ElementUtilities.removeClass(command.element, _Constants.ClassNames.commandSecondaryOverflownPolicyClass);
-        _ElementUtilities.removeClass(command.element, _Constants.ClassNames.commandSeparatorHiddenPolicyClass);
-    }
-
-    private _hasHiddenPolicyClasses(command: _Command.ICommand) {
-        return _ElementUtilities.hasClass(command.element, _Constants.ClassNames.commandPrimaryOverflownPolicyClass)
-            || _ElementUtilities.hasClass(command.element, _Constants.ClassNames.commandSecondaryOverflownPolicyClass)
-            || _ElementUtilities.hasClass(command.element, _Constants.ClassNames.commandSeparatorHiddenPolicyClass);
-    }
-
-    private _hasAnyHiddenClasses(command: _Command.ICommand) {
-        // Checks if we've processed and recognized a command as being hidden
-        return _ElementUtilities.hasClass(command.element, _Constants.ClassNames.commandHiddenClass) || this._hasHiddenPolicyClasses(command);
     }
 
     private _isCommandInActionArea(element: HTMLElement) {
@@ -1044,59 +989,13 @@ export class _CommandingSurface {
 
     })();
 
-    private _getDataChangeInfo(): IDataChangeInfo {
-        var i = 0, len = 0;
-        var added: HTMLElement[] = [];
-        var deleted: HTMLElement[] = [];
-        var unchanged: HTMLElement[] = [];
-        var prevVisible: HTMLElement[] = [];
-        var prevElements: HTMLElement[] = [];
-        var nextVisible: HTMLElement[] = [];
-        var nextElements: HTMLElement[] = [];
-        var nextOverflown: HTMLElement[] = [];
-        var nextHiding: HTMLElement[] = [];
-        var nextShowing: HTMLElement[] = [];
-
-        Array.prototype.forEach.call(this._dom.actionArea.querySelectorAll(_Constants.commandSelector), (commandElement: HTMLElement) => {
-            if (!this._hasAnyHiddenClasses(commandElement["winControl"])) {
-                prevVisible.push(commandElement);
-            }
-            prevElements.push(commandElement);
-        });
-
-        this.data.forEach((command) => {
-            var hidden = command.hidden;
-            var hiding = hidden && !_ElementUtilities.hasClass(command.element, _Constants.ClassNames.commandHiddenClass);
-            var showing = !hidden && _ElementUtilities.hasClass(command.element, _Constants.ClassNames.commandHiddenClass);
-            var overflown = _ElementUtilities.hasClass(command.element, _Constants.ClassNames.commandPrimaryOverflownPolicyClass);
-
-            if (!this._hasAnyHiddenClasses(command.element["winControl"])) {
-                nextVisible.push(command.element);
-            }
-
-            if (overflown) {
-                nextOverflown.push(command.element);
-            } else if (hiding) {
-                nextHiding.push(command.element);
-            } else if (showing) {
-                nextShowing.push(command.element);
-            }
-            nextElements.push(command.element);
-        });
-
-        deleted = diffElements(prevElements, nextElements);
-        unchanged = intersectElements(prevVisible, nextVisible);
-        added = diffElements(nextElements, prevElements);
-
+    private _getDataChangeInfo(): IDataChangeInfo {        
+        var prevCommands = this._actionArea.children.map(element => element['winControl']);
+        var nextCommands = this._data.slice(0);
+        
         return {
-            nextElements: nextElements,
-            prevElements: prevElements,
-            added: added,
-            deleted: deleted,
-            unchanged: unchanged,
-            hiding: nextHiding,
-            showing: nextShowing,
-            overflown: nextOverflown
+            added: diffElements(nextCommands, prevCommands),
+            deleted: diffElements(prevCommands, nextCommands)
         };
     }
 
@@ -1105,59 +1004,16 @@ export class _CommandingSurface {
 
         var changeInfo = this._getDataChangeInfo();
 
-        // Take a snapshot of the current state
-        var updateCommandAnimation = Animations._createUpdateListAnimation(
-            // We must also include the elements from "overflown" to ensure that we continue
-            // to animate any command elements that have underflowed back into the actionarea
-            // as a part of this data change.
-            changeInfo.added.concat(changeInfo.showing).concat(changeInfo.overflown),
-            changeInfo.deleted.concat(changeInfo.hiding),
-            changeInfo.unchanged);
-
         // Unbind property mutation event listener from deleted IObservableCommands
-        changeInfo.deleted.forEach((deletedElement) => {
-            var command = <_Command.ICommand>(deletedElement['winControl']);
-            if (command && command['_propertyMutations']) {
-                (<_Command.IObservableCommand>command)._propertyMutations.unbind(this._refreshBound);
-            }
+        changeInfo.deleted.forEach((deletedCommand) => {
+            (<_Command.IObservableCommand>deletedCommand)._propertyMutations.unbind(this._refreshBound);
         });
 
         // Bind property mutation event listener to added IObservable commands
-        changeInfo.added.forEach((addedElement) => {
-            var command = <_Command.ICommand>(addedElement['winControl']);
-            if (command && command['_propertyMutations']) {
-                (<_Command.IObservableCommand>command)._propertyMutations.bind(this._refreshBound);
-            }
+        changeInfo.added.forEach((addedCommand) => {
+            (<_Command.IObservableCommand>addedCommand)._propertyMutations.bind(this._refreshBound);
         });
-
-        // Remove current ICommand elements
-        changeInfo.prevElements.forEach((element) => {
-            if (element.parentElement) {
-                element.parentElement.removeChild(element);
-            }
-        });
-
-        // Add new ICommand elements in the right order.
-        changeInfo.nextElements.forEach((element) => {
-            this._dom.actionArea.appendChild(element);
-        });
-
-        // Actually hide commands now that the animation has been created
-        changeInfo.hiding.forEach(element => {
-            _ElementUtilities.addClass(element, _Constants.ClassNames.commandHiddenClass);
-        });
-
-        // Actually show commands now that the animation has been created
-        changeInfo.showing.forEach(element => {
-            _ElementUtilities.removeClass(element, _Constants.ClassNames.commandHiddenClass);
-        });
-
-        // Ensure that the overflow button is always the last element in the actionarea
-        this._dom.actionArea.appendChild(this._dom.overflowButton);
-
-        // Execute the animation.
-        updateCommandAnimation.execute();
-
+        
         // Indicate processing was successful.
         return true;
     }
@@ -1165,12 +1021,14 @@ export class _CommandingSurface {
     private _measure(): boolean {
         this._writeProfilerMark("_measure,info");
         if (this._canMeasure()) {
-
-            var originalDisplayStyle = this._dom.overflowButton.style.display;
-            this._dom.overflowButton.style.display = "";
+            
+            var renderedCommands = this._actionArea.childrenInDom.map(element => element['winControl']);
+            var allCommands = this._data.slice(0);
+            var commandsToRender = diffElements(allCommands, renderedCommands);
+            
+            commandsToRender.forEach(command => this._actionArea.appendChild(command.element));
+            
             var overflowButtonWidth = _ElementUtilities._getPreciseTotalWidth(this._dom.overflowButton);
-            this._dom.overflowButton.style.display = originalDisplayStyle;
-
             var actionAreaContentBoxWidth = _ElementUtilities._getPreciseContentWidth(this._dom.actionArea);
 
             var separatorWidth = 0;
@@ -1178,11 +1036,6 @@ export class _CommandingSurface {
             var contentCommandWidths: { [uniqueID: string]: number; } = {};
 
             this._primaryCommands.forEach((command) => {
-                // Ensure that the element we are measuring does not have display: none (e.g. it was just added, and it
-                // will be animated in)
-                var originalDisplayStyle = command.element.style.display;
-                command.element.style.display = "inline-block";
-
                 if (command.type === _Constants.typeContent) {
                     // Measure each 'content' command type that we find
                     contentCommandWidths[this._commandUniqueId(command)] = _ElementUtilities._getPreciseTotalWidth(command.element);
@@ -1197,10 +1050,9 @@ export class _CommandingSurface {
                         standardCommandWidth = _ElementUtilities._getPreciseTotalWidth(command.element);
                     }
                 }
-
-                // Restore the original display style
-                command.element.style.display = originalDisplayStyle;
             });
+            
+            commandsToRender.forEach(command => this._actionArea.removeChild(command.element));
 
             this._cachedMeasurements = {
                 contentCommandWidths: contentCommandWidths,
@@ -1230,7 +1082,6 @@ export class _CommandingSurface {
         // Separate hidden commands from visible commands.
         // Organize visible commands by section.
         this.data.forEach((command) => {
-            this._clearHiddenPolicyClasses(command);
             if (!command.hidden) {
                 if (command.section === _Constants.secondaryCommandSection) {
                     visibleSecondaryCommands.push(command);
@@ -1239,24 +1090,18 @@ export class _CommandingSurface {
                 }
             }
         });
+        
+        //
+        // Compute action area state
+        //
 
         var hasVisibleSecondaryCommand = visibleSecondaryCommands.length > 0;
         var primaryCommandsLocation = this._getVisiblePrimaryCommandsLocation(visiblePrimaryCommands, hasVisibleSecondaryCommand);
-        visiblePrimaryCommandsForActionArea = primaryCommandsLocation.commandsForActionArea;
+        visiblePrimaryCommandsForActionArea = this._removeUnneededSeparators(primaryCommandsLocation.commandsForActionArea);
         visiblePrimaryCommandsForOverflowArea = primaryCommandsLocation.commandsForOverflowArea;
-
+        
         //
-        // Layout commands in the action area
-        //
-
-        // Apply the policy classes for overflown and secondary commands.
-        visiblePrimaryCommandsForOverflowArea.forEach(command => _ElementUtilities.addClass(command.element, _Constants.ClassNames.commandPrimaryOverflownPolicyClass));
-        visibleSecondaryCommands.forEach(command => _ElementUtilities.addClass(command.element, _Constants.ClassNames.commandSecondaryOverflownPolicyClass));
-
-        this._hideSeparatorsIfNeeded(visiblePrimaryCommandsForActionArea);
-
-        //
-        // Layout commands in the overflow area 
+        // Compute ovenflow area state
         // Project overflowing and secondary commands into the overflowArea as MenuCommands.
         //
 
@@ -1312,15 +1157,32 @@ export class _CommandingSurface {
             }
             menuCommandProjections.push(this._projectAsMenuCommand(command));
         });
-
+        
+        this._menuCommandProjections = menuCommandProjections;
+        
+        //
+        // Render action area
+        //
+        
+        var needsOverflowButton = this._needsOverflowButton(
+            /* hasVisibleCommandsInActionArea */ visiblePrimaryCommandsForActionArea.length > 0, 
+            /* hasVisibleCommandsInOverflowArea */ menuCommandProjections.length > 0
+        );
+        var actionAreaElements = visiblePrimaryCommands.map(command => command.element);
+        if (needsOverflowButton) {
+            actionAreaElements.push(this._dom.overflowButton);
+        }
+        this._actionArea.children = actionAreaElements;
+        
+        //
+        // Render overflow area
+        //
+        
         this._hideSeparatorsIfNeeded(menuCommandProjections);
-
-        // Add menuCommandProjections to the DOM.
         menuCommandProjections.forEach((command) => {
             this._dom.overflowArea.appendChild(command.element);
         });
-        this._menuCommandProjections = menuCommandProjections;
-
+        
         // Reserve additional horizontal space for toggle icons if any MenuCommand projection is type "toggle"
         _ElementUtilities[hasToggleCommands ? "addClass" : "removeClass"](this._dom.overflowArea, _Constants.ClassNames.menuContainsToggleCommandClass);
 
@@ -1329,16 +1191,6 @@ export class _CommandingSurface {
             // Otherwise the overflow area should be empty and not take up height.
             this._dom.overflowArea.appendChild(this._dom.overflowAreaSpacer);
         }
-
-        //
-        // Style the overflow button
-        //
-
-        var needsOverflowButton = this._needsOverflowButton(
-            /* hasVisibleCommandsInActionArea */ visiblePrimaryCommandsForActionArea.length > 0, 
-            /* hasVisibleCommandsInOverflowArea */ menuCommandProjections.length > 0
-            );
-        this._dom.overflowButton.style.display = needsOverflowButton ? "" : "none";
 
         this._writeProfilerMark("_layoutCommands,StopTM");
 
@@ -1506,6 +1358,33 @@ export class _CommandingSurface {
         }
         menuCommand["_originalICommand"] = originalCommand;
         return menuCommand;
+    }
+    
+    private _removeUnneededSeparators<T>(commands: T[]): T[] {
+        var prevType = _Constants.typeSeparator;
+        var trimmedCommands: T[] = [];
+
+        // Hide all leading or consecutive separators
+        var commandsLength = commands.length;
+        commands.forEach((command) => {
+            var commandWithType = <ICommandWithType><any>command;
+            var isExtraSeparator = commandWithType.type === _Constants.typeSeparator && prevType === _Constants.typeSeparator;
+            if (!isExtraSeparator) {
+                trimmedCommands.push(command);
+            }
+            prevType = commandWithType.type;
+        });
+
+        // Hide trailing separators
+        var i;
+        for (i = commandsLength - 1; i >= 0; i--) {
+            var commandWithType = <ICommandWithType><any>commands[i];
+            if (commandWithType.type !== _Constants.typeSeparator) {
+                break;
+            }
+        }
+        
+        return trimmedCommands.slice(0, i + 1);
     }
 
     private _hideSeparatorsIfNeeded(commands: ICommandWithType[]): void {

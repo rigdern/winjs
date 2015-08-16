@@ -400,7 +400,7 @@ export declare class ListBase<T> {
      * @param end The index that specifies the end of the section.
      * @returns Returns a section of list.
     **/
-    slice(begin: number, end: number): T[];
+    slice(begin: number, end?: number): T[];
 
     /**
      * Checks whether the specified callback function returns true for any element of a list.
