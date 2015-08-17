@@ -173,19 +173,12 @@
         opacity: 0;
     }
     
-    // When a command is in the CommandingSurface, the CommandingSurface will control the visibility thru
-    // the win-commandingsurface-command-hidden class in order to coordinate animations. Therefore, we
-    // overwrite the win-command-hidden to not actually affect the visibility.
+    // When a command is in the CommandingSurface, the CommandingSurface will control its visibility
+    // to coordinate animations. Therefore, we overwrite the win-command-hidden to not actually affect the visibility.
     .win-command.win-command-hidden {
         display: inline-block;
     }
-
-    .win-command.win-commandingsurface-command-hidden {
-        display: none;
-    }
-
-    .win-command.win-commandingsurface-command-primary-overflown,
-    .win-command.win-commandingsurface-command-secondary-overflown,
+    
     .win-command.win-commandingsurface-command-separator-hidden {
         display: none;
     }
