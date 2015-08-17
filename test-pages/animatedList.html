@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+	<title>AnimatedList</title>
+	
+	<link href="../bin/Microsoft.WinJS.4.1/css/ui-dark.css" rel="stylesheet" />
+	<script src="../bin/Microsoft.WinJS.4.1/js/base.js"></script>
+	<script src="../bin/Microsoft.WinJS.4.1/js/ui.js"></script>
+	
+	<style>
+		.item {
+			background-color: steelblue;
+			height: 100px;
+			width: 100px;
+			margin: 5px;
+			display: inline-block;
+		}
+		
+		.win-animatedlist-removing {
+			background-color: red;
+		}
+	</style>
+	<script>
+		function toggle() {
+			if (items.indexOf(item3) === -1) {
+				items.splice(3, 0, item3);
+			} else {
+				items.splice(3, 1);
+			}
+			animatedList.children = items;
+		}
+		
+		function toggleSync() {
+			if (items.indexOf(item3) === -1) {
+				items.splice(3, 0, item3);
+			} else {
+				items.splice(3, 1);
+			}
+			animatedList.childrenInDom = items;
+		}
+		
+		function makeItem(label) {
+			var e = document.createElement("div");
+			e.classList.add("item");
+			e.textContent = "Item " + label;
+			return e;
+		}
+		
+		var items;
+		var item3;
+		var animatedList;
+		function init() {
+			WinJS.Utilities._require("WinJS/Controls/CommandingSurface/_AnimatedList");
+			WinJS.UI.processAll().then(function () {
+				animatedList = document.querySelector("#animatedListEl").winControl;
+				items = [];
+				for (var i = 0; i < 5; i++) {
+					items.push(makeItem(i));
+				}
+				item3 = items[3];
+				animatedList.childrenInDom = items;
+			});
+		}
+		WinJS.Utilities.ready(init);
+	</script>
+</head>
+<body class="win-type-body">
+	<button class="win-button" onclick="toggle();">Edit</button>
+	<button class="win-button" onclick="toggleSync();">Edit Sync</button>
+	<div id="animatedListEl" data-win-control="WinJS.UI.AnimatedList">
+	</div>
+</body>
+</html>
+		

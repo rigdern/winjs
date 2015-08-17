@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+	<title>Update Animation</title>
+	
+	<link href="../bin/Microsoft.WinJS.4.1/css/ui-dark.css" rel="stylesheet" />
+	<script src="../bin/Microsoft.WinJS.4.1/js/base.js"></script>
+	<script src="../bin/Microsoft.WinJS.4.1/js/ui.js"></script>
+	
+	<style>
+		.item {
+			background-color: steelblue;
+			height: 100px;
+			width: 100px;
+			margin: 5px;
+			display: inline-block;
+		}
+		
+		.win-animatedlist-removing {
+			background-color: red;
+		}
+	</style>
+	<script>
+		function toggle() {
+			if (!root.contains(item3)) {
+				var animation = WinJS.UI.Animation._createUpdateListAnimation([item3], [], [].slice.call(root.children, 0));
+				root.insertBefore(item3, root.children[3]);
+				animation.execute();
+			} else {
+				var affected = [].filter.call(root.children, function (e) { return e !== item3; });
+				var animation = WinJS.UI.Animation._createUpdateListAnimation([], [item3], affected);
+				root.removeChild(item3);
+				item3.style.position = "absolute";
+				item3.style.opacity = 0;
+				root.insertBefore(item3, root.children[0]);
+				animation.execute().then(function () {
+					item3.style.position = "";
+					item3.style.opacity = "";
+					root.removeChild(item3);
+				});
+				
+			}
+		}
+		
+		function makeItem(label) {
+			var e = document.createElement("div");
+			e.classList.add("item");
+			e.textContent = "Item " + label;
+			return e;
+		}
+		
+		var item3;
+		var root;
+		function init() {
+			root = document.querySelector("#rootEl");
+			for (var i = 0; i < 5; i++) {
+				root.appendChild(makeItem(i));
+			}
+			item3 = root.children[3];
+		}
+		WinJS.Utilities.ready(init);
+	</script>
+</head>
+<body class="win-type-body">
+	<button class="win-button" onclick="toggle();">Edit</button>
+	<div id="rootEl">
+	</div>
+</body>
+</html>
+		

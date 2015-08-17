@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+	<title>ToolBar (4.1)</title>
+	
+	<link href="https://cdnjs.cloudflare.com/ajax/libs/winjs/4.1.0/css/ui-dark.css" rel="stylesheet" />
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/winjs/4.1.0/js/base.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/winjs/4.1.0/js/ui.js"></script>
+	
+	<style>
+		#toolBarEl {
+			width: 240px;
+		}
+		#toolBarEl.thin {
+			width: 170px;
+		}
+		.item {
+			background-color: steelblue;
+			height: 100px;
+			width: 100px;
+			margin: 5px;
+			display: inline-block;
+		}
+		
+		.win-animatedlist-removing {
+			background-color: red;
+		}
+	</style>
+	<script>
+		function editList() {
+			if (toolBar.data.indexOf(item1) !== -1) {
+				toolBar.data.splice(1, 1);
+			} else {
+				toolBar.data.splice(1, 0, item1);
+			}
+		}
+		
+		function toggleHidden() {
+			toolBar.data.getAt(1).hidden = !toolBar.data.getAt(1).hidden;
+		}
+		
+		function toggleWidth() {
+			toolBar.element.classList.toggle('thin');
+			toolBar.forceLayout();
+		}
+		
+		function toggleClosedDisplayMode() {
+			toolBar.closedDisplayMode = (toolBar.closedDisplayMode === "compact") ? "full" : "compact";
+		}
+		
+		var items;
+		var item1;
+		var toolBar;
+		function init() {
+			WinJS.UI.processAll().then(function () {
+				toolBar = document.getElementById("toolBarEl").winControl;
+				item1 = toolBar.data.getAt(1);
+			});
+		}
+		WinJS.Utilities.ready(init);
+	</script>
+</head>
+<body class="win-type-body">
+	<button class="win-button" onclick="editList();">Edit</button>
+	<button class="win-button" onclick="toggleHidden();">Toggle Hidden</button>
+	<button class="win-button" onclick="toggleWidth();">Toggle Width</button>
+	<button class="win-button" onclick="toggleClosedDisplayMode();">Toggle Closed Display Mode</button>
+	<div id="toolBarEl" data-win-control="WinJS.UI.ToolBar">
+		<button data-win-control="WinJS.UI.Command" data-win-options="{
+			id: 'cmdAdd',
+			label: 'add',
+			icon: 'add'
+		}"></button>
+		<button data-win-control="WinJS.UI.Command" data-win-options="{
+			id: 'cmdRemove',
+			label: 'remove',
+			icon: 'remove'
+		}"></button>
+		<button data-win-control="WinJS.UI.Command" data-win-options="{
+			id: 'cmdAccept',
+			label: 'accept',
+			icon: 'accept'
+		}"></button>
+	</div>
+</body>
+</html>
+		
