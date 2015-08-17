@@ -1,5 +1,6 @@
 define([
-], function () {
+    'exports'
+], function (exports) {
     var ClassNames = {
         animatedList: "win-animatedlist",
         removing: "win-animatedlist-removing"
@@ -31,7 +32,7 @@ define([
                 this._updateDom();
             }
         },
-        childernInDom: {
+        childrenInDom: {
             get: function () {
                 return this._rendered.items;
             },
@@ -54,6 +55,7 @@ define([
         },
         _initializeDom: function (root) {
             root.classList.add(ClassNames.animatedList);
+            root.winControl = this;
             
             this._dom = {
                 root: root
@@ -76,6 +78,8 @@ define([
             nextItems.forEach(function (e) {
                 this._dom.root.appendChild(e);
             }, this);
+            
+            rendered.items = nextItems;
         },
         _updateDom: function () {
             if (this._animationPromise) {
@@ -121,7 +125,7 @@ define([
         }
     });
     
-    WinJS.Namespace.define("WinJS.UI", {
+    WinJS.Namespace._moduleDefine(exports, "WinJS.UI", {
         AnimatedList: AnimatedList
     });
 });

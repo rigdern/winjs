@@ -61,6 +61,7 @@ interface ICommandingSurface_UpdateDomImpl {
         isOpenedMode: boolean;
         overflowDirection: string;
         overflowAlignmentOffset: number;
+        commands: _Command.ICommand[];
     };
     update(): void;
     dataDirty(): void;
@@ -857,6 +858,7 @@ export class _CommandingSurface {
             isOpenedMode: <boolean>undefined,
             overflowDirection: <string>undefined,
             overflowAlignmentOffset: <number>undefined,
+            commands: <_Command.ICommand[]>[]
         };
 
         var _renderDisplayMode = () => {
@@ -918,7 +920,8 @@ export class _CommandingSurface {
 
         var _updateCommands = () => {
             this._writeProfilerMark("_updateDomImpl_updateCommands,info");
-
+            
+            var rendered = _renderedState;
             var currentStage = _currentLayoutStage;
             // The flow of stages in the CommandLayoutPipeline is defined as:
             //      newDataStage -> measuringStage -> layoutStage -> idle
@@ -937,6 +940,9 @@ export class _CommandingSurface {
                     case CommandLayoutPipeline.layoutStage:
                         currentStage = CommandLayoutPipeline.idle;
                         okToProceed = this._layoutCommands();
+                        if (okToProceed) {
+                            rendered.commands = this._data.slice(0);
+                        }
                         break;
                 }
 
@@ -966,6 +972,7 @@ export class _CommandingSurface {
                     get isOpenedMode() { return _renderedState.isOpenedMode },
                     get overflowDirection() { return _renderedState.overflowDirection },
                     get overflowAlignmentOffset() { return _renderedState.overflowAlignmentOffset },
+                    get commands() { return _renderedState.commands }
                 };
             },
             update(): void {
@@ -990,7 +997,7 @@ export class _CommandingSurface {
     })();
 
     private _getDataChangeInfo(): IDataChangeInfo {        
-        var prevCommands = this._actionArea.children.map(element => element['winControl']);
+        var prevCommands = this._updateDomImpl.renderedState.commands;
         var nextCommands = this._data.slice(0);
         
         return {
@@ -1168,7 +1175,7 @@ export class _CommandingSurface {
             /* hasVisibleCommandsInActionArea */ visiblePrimaryCommandsForActionArea.length > 0, 
             /* hasVisibleCommandsInOverflowArea */ menuCommandProjections.length > 0
         );
-        var actionAreaElements = visiblePrimaryCommands.map(command => command.element);
+        var actionAreaElements = visiblePrimaryCommandsForActionArea.map(command => command.element);
         if (needsOverflowButton) {
             actionAreaElements.push(this._dom.overflowButton);
         }
@@ -1376,7 +1383,7 @@ export class _CommandingSurface {
         });
 
         // Hide trailing separators
-        var i;
+        var i: number;
         for (i = commandsLength - 1; i >= 0; i--) {
             var commandWithType = <ICommandWithType><any>commands[i];
             if (commandWithType.type !== _Constants.typeSeparator) {
