@@ -57,11 +57,16 @@ interface IDataChangeInfo {
 
 interface ICommandingSurface_UpdateDomImpl {
     renderedState: {
+        // _renderDisplayMode
         closedDisplayMode: string;
         isOpenedMode: boolean;
         overflowDirection: string;
         overflowAlignmentOffset: number;
+        
+        // _updateCommands
         commands: _Command.ICommand[];
+        actionAreaContentBoxWidth: number;
+        actionAreaClosedDisplayMode: string;
     };
     update(): void;
     dataDirty(): void;
@@ -858,7 +863,10 @@ export class _CommandingSurface {
             isOpenedMode: <boolean>undefined,
             overflowDirection: <string>undefined,
             overflowAlignmentOffset: <number>undefined,
-            commands: <_Command.ICommand[]>[]
+            
+            commands: <_Command.ICommand[]>[],
+            actionAreaContentBoxWidth: <number>undefined,
+            actionAreaClosedDisplayMode: <string>undefined
         };
 
         var _renderDisplayMode = () => {
@@ -942,6 +950,8 @@ export class _CommandingSurface {
                         okToProceed = this._layoutCommands();
                         if (okToProceed) {
                             rendered.commands = this._data.slice(0);
+                            rendered.actionAreaContentBoxWidth = this._cachedMeasurements.actionAreaContentBoxWidth;
+                            rendered.actionAreaClosedDisplayMode = this.closedDisplayMode;
                         }
                         break;
                 }
@@ -972,7 +982,9 @@ export class _CommandingSurface {
                     get isOpenedMode() { return _renderedState.isOpenedMode },
                     get overflowDirection() { return _renderedState.overflowDirection },
                     get overflowAlignmentOffset() { return _renderedState.overflowAlignmentOffset },
-                    get commands() { return _renderedState.commands }
+                    get commands() { return _renderedState.commands },
+                    get actionAreaContentBoxWidth() { return _renderedState.actionAreaContentBoxWidth },
+                    get actionAreaClosedDisplayMode() { return _renderedState.actionAreaClosedDisplayMode }
                 };
             },
             update(): void {
@@ -1179,7 +1191,16 @@ export class _CommandingSurface {
         if (needsOverflowButton) {
             actionAreaElements.push(this._dom.overflowButton);
         }
-        this._actionArea.children = actionAreaElements;
+        var rendered = this._updateDomImpl.renderedState;
+        // Only perform command animations if the dimensions of the action area haven't changed
+        var performActionAreaAnimations =
+            this._cachedMeasurements.actionAreaContentBoxWidth === rendered.actionAreaContentBoxWidth &&
+            this.closedDisplayMode === rendered.actionAreaClosedDisplayMode;
+        if (performActionAreaAnimations) {
+            this._actionArea.children = actionAreaElements;
+        } else {
+            this._actionArea.childrenInDom = actionAreaElements;
+        }
         
         //
         // Render overflow area

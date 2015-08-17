@@ -96,6 +96,12 @@ define([
             var removed = arrayDiff(prevItems, nextItems);
             var affected = arrayDiff(prevItems, removed);
             
+            var removedDimensions = removed.map(function (element) {
+                return {
+                    width: getComputedStyle(element).width,
+                    height: getComputedStyle(element).height
+                }
+            });
             var animation = WinJS.UI.Animation._createUpdateListAnimation(added, removed, affected);
             
             prevItems.forEach(function (e) {
@@ -104,8 +110,11 @@ define([
             nextItems.forEach(function (e) {
                 this._dom.root.appendChild(e);
             }, this);
-            removed.forEach(function (e) {
+            removed.forEach(function (e, i) {
+                var dim = removedDimensions[i];
                 e.classList.add(ClassNames.removing);
+                e.style.width = dim.width;
+                e.style.height = dim.height;
                 this._dom.root.appendChild(e);
             }, this);
             
@@ -114,6 +123,8 @@ define([
             this._animationPromise = animation.execute().then(function () {
                 removed.forEach(function (e) {
                     e.classList.remove(ClassNames.removing);
+                    e.style.width = "";
+                    e.style.height = "";
                     e.parentNode && e.parentNode.removeChild(e);
                 });
                 this._animationPromise = null;
