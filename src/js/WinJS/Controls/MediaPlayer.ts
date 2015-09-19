@@ -3,18 +3,31 @@
 
 import _Base = require('../Core/_Base');
 import _MediaPlayer = require('./MediaPlayer/_MediaPlayer');
+import _MediaElementAdapter = require('./MediaPlayer/_MediaElementAdapter');
 
-var module: typeof _MediaPlayer = null;
+var moduleMediaPlayer: typeof _MediaPlayer = null;
+var moduleMediaElementAdapter: typeof _MediaElementAdapter = null;
 
 _Base.Namespace.define("WinJS.UI", {
     MediaPlayer: {
         get: () => {
-            if (!module) {
+            if (!moduleMediaPlayer) {
                 require(["./MediaPlayer/_MediaPlayer"], (m: typeof _MediaPlayer) => {
-                    module = m;
+                    moduleMediaPlayer = m;
                 });
             }
-            return module.MediaPlayer;
+            return moduleMediaPlayer.MediaPlayer;
+        }
+    },
+    
+    MediaElementAdapter: {
+        get: () => {
+            if (!moduleMediaElementAdapter) {
+                require(["./MediaPlayer/_MediaElementAdapter"], (m: typeof _MediaElementAdapter) => {
+                    moduleMediaElementAdapter = m;
+                });
+            }
+            return moduleMediaElementAdapter.MediaElementAdapter;
         }
     },
     

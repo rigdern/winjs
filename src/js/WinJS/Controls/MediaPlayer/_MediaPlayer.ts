@@ -11,23 +11,27 @@ import _ErrorFromName = require('../../Core/_ErrorFromName');
 import _Events = require('../../Core/_Events');
 import _Global = require('../../Core/_Global');
 import _Hoverable = require('../../Utilities/_Hoverable');
+import _MediaElementAdapter = require('./_MediaElementAdapter');
 import Promise = require('../../Promise');
 // import _TransitionAnimation = require('../../Animations/_TransitionAnimation');
 
-require(["require-style!less/styles-splitview"]);
-require(["require-style!less/colors-splitview"]);
+require(["require-style!less/styles-mediaplayer"]);
+require(["require-style!less/colors-mediaplayer"]);
+
+"use strict";
 
 // Force-load Dependencies
 _Hoverable.isHoverable;
-
-"use strict";
 
 var transformNames = _BaseUtils._browserStyleEquivalents["transform"];
 var Strings = {
     get duplicateConstruction() { return "Invalid argument: Controls may only be instantiated one time for each DOM element"; }
 };
 var ClassNames = {
-    mediaPlayer: "win-mediaplayer"
+    // Elements
+    mediaPlayer: "win-mediaplayer",
+    controls: "win-mediaplayer-controls",
+    video: "win-mediaplayer-video"
 };
 var EventNames = {
 };
@@ -37,10 +41,13 @@ export class MediaPlayer {
     static supportedForProcessing: boolean = true;
 
     private static _ClassNames = ClassNames;
-
+    
+    private _initialized: boolean;
     private _disposed: boolean;
     _dom: {
         root: HTMLElement;
+        content: HTMLElement;
+        controls: HTMLElement;
     };
 
     constructor(element?: HTMLElement, options: any = {}) {
@@ -52,14 +59,29 @@ export class MediaPlayer {
         this._initializeDom(element || _Global.document.createElement("div"));
 
         // Initialize private state.
+        this._initialized = false;
         this._disposed = false;
 
         // Initialize public properties.
         _Control.setOptions(this, options);
+        if (!this.mediaElementAdapter) {
+            this.mediaElementAdapter = new _MediaElementAdapter.MediaElementAdapter(this, null);
+        }
+        
+        this._initialized = true;
+        this._updateDomImpl();
     }
 	
     get element(): HTMLElement {
         return this._dom.root;
+    }
+    
+    private _mediaElementAdapter: _MediaElementAdapter.MediaElementAdapter;
+    get mediaElementAdapter(): _MediaElementAdapter.MediaElementAdapter {
+        return this._mediaElementAdapter;
+    }
+    set mediaElementAdapter(value: _MediaElementAdapter.MediaElementAdapter) {
+        this._mediaElementAdapter = value;
     }
 
     dispose(): void {
@@ -70,12 +92,26 @@ export class MediaPlayer {
     }
 
     private _initializeDom(root: HTMLElement): void {
+        var getElement = (className: string): HTMLElement => {
+            return <HTMLElement>root.querySelector("." + className);
+        };
+        
         root["winControl"] = this;
         _ElementUtilities.addClass(root, ClassNames.mediaPlayer);
         _ElementUtilities.addClass(root, "win-disposable");
+        
+        var contentEl = document.createElement("div");
+        _ElementUtilities.addClass(contentEl, ClassNames.mediaPlayer);
+        contentEl.innerHTML =
+            '<div class="win-mediaplayer-container">' +
+                '<div class="win-mediaplayer-controls"></div>'
+            '</div>';
+        root.appendChild(contentEl);
 
         this._dom = {
-            root: root
+            root: root,
+            content: contentEl,
+            controls: getElement(ClassNames.controls)
         };
     }
 
@@ -85,10 +121,29 @@ export class MediaPlayer {
     // they are undefined, the first time _updateDomImpl is called, they will all be
     // rendered.
     private _updateDomImpl_rendered = {
+        mediaElement: <HTMLMediaElement>undefined
     };
     private _updateDomImpl(): void {
+        if (!this._initialized) {
+            return;
+        }
+        
         var rendered = this._updateDomImpl_rendered;
-
+        
+        // TODO: Can this.mediaElementAdapter be null? Do consumers ever set it to null?
+        var mediaElement = this.mediaElementAdapter.mediaElement;
+        
+        if (rendered.mediaElement !== mediaElement) {
+            if (rendered.mediaElement) {
+                // TODO: No class for audio?
+                // TODO: Who removes this mediaElement from the DOM?
+                _ElementUtilities.removeClass(mediaElement, ClassNames.video);
+            }
+            if (mediaElement) {
+                _ElementUtilities.addClass(mediaElement, ClassNames.video);
+                this._dom.controls.parentNode.insertBefore(mediaElement, this._dom.controls);
+            }
+        }
 	}
 }
 
