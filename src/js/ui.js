@@ -18,6 +18,7 @@ define([
     'WinJS/Controls/Hub',
     'WinJS/Controls/Flyout',
     'WinJS/Controls/_LegacyAppBar',
+    'WinJS/Controls/MediaPlayer',
     'WinJS/Controls/Menu',
     'WinJS/Controls/SearchBox',
     'WinJS/Controls/SettingsFlyout',
