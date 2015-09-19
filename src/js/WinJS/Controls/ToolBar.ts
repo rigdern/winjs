@@ -6,7 +6,7 @@ import _ToolBar = require('./ToolBar/_ToolBar');
 
 var module: typeof _ToolBar = null;
 
-_Base.Namespace.define("WinJS.UI", {
+var publicMembers = Object.create({}, {
     ToolBar: {
         get: () => {
             if (!module) {
@@ -18,3 +18,6 @@ _Base.Namespace.define("WinJS.UI", {
         }
     }
 });
+
+_Base.Namespace.define("WinJS.UI", publicMembers);
+export = publicMembers;

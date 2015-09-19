@@ -13,6 +13,8 @@ import _Global = require('../../Core/_Global');
 import _Hoverable = require('../../Utilities/_Hoverable');
 import _MediaElementAdapter = require('./_MediaElementAdapter');
 import Promise = require('../../Promise');
+import ToolBar = require("../ToolBar");
+import _IToolBar = require("../ToolBar/_ToolBar"); // Only used for type information
 // import _TransitionAnimation = require('../../Animations/_TransitionAnimation');
 
 require(["require-style!less/styles-mediaplayer"]);
@@ -29,8 +31,12 @@ var Strings = {
 };
 var ClassNames = {
     // Elements
-    mediaPlayer: "win-mediaplayer",
+    commands: "win-mediaplayer-commands",
+    container: "win-mediaplayer-container",
     controls: "win-mediaplayer-controls",
+    mediaPlayer: "win-mediaplayer",
+    timeline: "win-mediaplayer-timeline",
+    transportControls: "win-mediaplayer-transportcontrols",
     video: "win-mediaplayer-video"
 };
 var EventNames = {
@@ -48,6 +54,7 @@ export class MediaPlayer {
         root: HTMLElement;
         content: HTMLElement;
         controls: HTMLElement;
+        toolBar: _IToolBar.ToolBar;
     };
 
     constructor(element?: HTMLElement, options: any = {}) {
@@ -102,16 +109,25 @@ export class MediaPlayer {
         
         var contentEl = document.createElement("div");
         _ElementUtilities.addClass(contentEl, ClassNames.mediaPlayer);
+        // TODO: Why did win-mediaplayer-timeline have class win-mediaplayer-thumbnailmode?
+        // TODO: Why does win-mediaplayer-timeline have tabIndex 0?
         contentEl.innerHTML =
-            '<div class="win-mediaplayer-container">' +
-                '<div class="win-mediaplayer-controls"></div>'
+            '<div class="' + ClassNames.container + '">' +
+                '<div class="' + ClassNames.controls + '">' +
+                    '<div class="' + ClassNames.transportControls + '">' +
+                        '<div class="' + ClassNames.timeline + '" tabIndex="0">' +
+                        '</div>' +
+                        '<div class="' + ClassNames.commands + '"></div>' +
+                    '</div>' +
+                '</div>' +
             '</div>';
         root.appendChild(contentEl);
 
         this._dom = {
             root: root,
             content: contentEl,
-            controls: getElement(ClassNames.controls)
+            controls: getElement(ClassNames.controls),
+            toolBar: new ToolBar.ToolBar(getElement(ClassNames.commands))
         };
     }
 
