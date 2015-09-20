@@ -28,6 +28,132 @@ require(["require-style!less/colors-mediaplayer"]);
 // Force-load Dependencies
 _Hoverable.isHoverable;
 
+//
+// AutoHider
+//
+
+// TODO: How to handle case of mouse leaving MediaPlayer?
+// TODO: How to handle touch? pointerout, pointercancel
+
+interface IAutoHiderClient {
+    element: HTMLElement;
+    isElementInSafeArea: Function;
+    onShow: Function;
+    onHide: Function;
+    autoHideDuration: number;
+}
+
+enum AutoHideState {
+    shown,
+    showing,
+    hidden,
+    disposed
+};
+
+class AutoHider {
+    private _client: IAutoHiderClient;
+    private _state: AutoHideState;
+    private _hideTimerToken: number;
+    private _lastPointerPosition: {x: number; y: number};
+    
+    constructor(client: IAutoHiderClient) {
+        this._state = AutoHideState.hidden;
+        this._client = client;
+        
+        this._onPointerMove = this._onPointerMove.bind(this);
+        _ElementUtilities._addEventListener(this._client.element, "pointermove", this._onPointerMove);
+    }
+    
+    shown() {
+        if (this._state === AutoHideState.disposed) { return; }
+        
+        this._state = AutoHideState.shown;
+        var element = this._lastPointerPosition ?
+            _Global.document.elementFromPoint(this._lastPointerPosition.x, this._lastPointerPosition.y) :
+            null;
+        this._pointerOnElementWhileShown(element)
+    }
+    
+    // TODO: Should we get rid of the public showing API and automatically
+    // move to showing after we fire "onShow"?
+    showing() {
+        if (this._state === AutoHideState.disposed) { return; }
+        
+        this._clearHideTimer();
+        this._state = AutoHideState.showing;
+    }
+    
+    hidden() {
+        if (this._state === AutoHideState.disposed) { return; }
+        
+        this._clearHideTimer();
+        this._state = AutoHideState.hidden;
+    }
+    
+    dispose() {
+        if (this._state !== AutoHideState.disposed) {
+            this._clearHideTimer();
+            _ElementUtilities._removeEventListener(this._client.element, "pointermove", this._onPointerMove);
+            this._client = null;
+            this._state = AutoHideState.disposed;
+        }
+    }
+    
+    private _restartHideTimer() {
+        this._clearHideTimer();
+        this._hideTimerToken = _Global.setTimeout(() => {
+            this._hideTimerToken = 0;
+            this._client.onHide();
+        }, this._client.autoHideDuration);
+    }
+    
+    private _clearHideTimer() {
+        if (this._hideTimerToken) {
+            _Global.clearTimeout(this._hideTimerToken);
+            this._hideTimerToken = 0;
+        }
+    }
+    
+    private _pointerOnElementWhileShown(element: EventTarget) {
+        if (element && this._client.isElementInSafeArea(element)) {
+            this._clearHideTimer();
+        } else {
+            this._restartHideTimer();
+        }
+    }
+    
+    private _onPointerMove(eventObject: PointerEvent) {
+        this._lastPointerPosition = {
+            x: eventObject.clientX,
+            y: eventObject.clientY
+        };
+        
+        switch (this._state) {
+            case AutoHideState.shown:
+                if (!(eventObject["movementX"] === 0 && eventObject["movementY"] === 0)) {
+                    // If the cursor hasn't moved, ignore the event. Works around a Chrome
+                    // bug where a mousemove event is generated when a layout change occurs
+                    // under the mouse.
+                    // https://code.google.com/p/chromium/issues/detail?id=333623
+                
+                    this._pointerOnElementWhileShown(eventObject.target);
+                }
+                break;
+            case AutoHideState.hidden:
+                this._client.onShow();
+                break;
+            case AutoHideState.disposed:
+            case AutoHideState.showing:
+                // no-op
+                break;
+        }
+    }
+}
+
+//
+// MediaPlayer
+//
+
 var transformNames = _BaseUtils._browserStyleEquivalents["transform"];
 var Strings = {
     get duplicateConstruction() { return "Invalid argument: Controls may only be instantiated one time for each DOM element"; },
@@ -366,8 +492,8 @@ export class MediaPlayer {
     };
     
     // Controls management
+    private _autoHider: AutoHider;
     private _controlsState: ControlsState;
-    private _hideControlsTimerToken: number;
     private _controlsAnimationPromise: Promise<any>;
 
     constructor(element?: HTMLElement, options: any = {}) {
@@ -382,6 +508,26 @@ export class MediaPlayer {
         this._initialized = false;
         this._disposed = false;
         this._controlsState = ControlsState.hidden;
+        this._autoHider = new AutoHider({
+            element: this._dom.root,
+            autoHideDuration: controlsAutoHideDuration,
+            onShow: () => {
+                this._playShownControlsAnimation();
+            },
+            onHide: () => {
+                this._playHideControlsAnimation();
+            },
+            isElementInSafeArea: (element: Node) => {
+                while (element && element !== this._dom.root) {
+                    if (element === this._dom.transportControls) {
+                        return true;
+                        break;
+                    }
+                    element = element.parentNode;
+                }
+                return false;
+            }
+        });
 
         // Initialize public properties.
         _Control.setOptions(this, options);
@@ -410,6 +556,7 @@ export class MediaPlayer {
             return;
         }
         this._disposed = true;
+        this._autoHider.dispose();
     }
 
     private _initializeDom(root: HTMLElement): void {
@@ -463,8 +610,6 @@ export class MediaPlayer {
             toolBar: toolBar,
             transportControls: getElement(ClassNames.transportControls)
         };
-        
-        _ElementUtilities._addEventListener(this._dom.root, "pointermove", this._onPointerMove.bind(this));
     }
 
     // State private to _updateDomImpl. No other method should make use of it.
@@ -520,10 +665,6 @@ export class MediaPlayer {
     
     private _prepareToAnimateControls(): void {
         this._controlsAnimationPromise && this._controlsAnimationPromise.cancel();
-        if (this._hideControlsTimerToken) {
-            _Global.clearTimeout(this._hideControlsTimerToken);
-            this._hideControlsTimerToken = 0;
-        }
     }
     
     private _playShownControlsAnimation(): void {
@@ -532,13 +673,11 @@ export class MediaPlayer {
         this._controlsState = ControlsState.showing;
         this._updateDomImpl();
         
-        // TODO: Might need to start timer after animation finishes. Maybe pointermove
-        // should cache last known location of mouse.
-        // TODO: How to handle case of mouse leaving MediaPlayer?
-        // TODO: How to handle touch? pointerout, pointercancel
+        this._autoHider.showing();
         Animations.fadeIn(this._dom.controls).done(() => {
             this._controlsState = ControlsState.shown;
             this._updateDomImpl();
+            this._autoHider.shown();
         });
     }
     
@@ -551,54 +690,8 @@ export class MediaPlayer {
         Animations.fadeOut(this._dom.controls).done(() => {
             this._controlsState = ControlsState.hidden;
             this._updateDomImpl();
+            this._autoHider.hidden();
         });
-    }
-    
-    private _onPointerMove(eventObject: PointerEvent) {
-        if (eventObject["movementX"] === 0 && eventObject["movementY"] === 0) {
-            // If the cursor hasn't moved, ignore the event. Works around a Chrome
-            // bug where a mousemove event is generated when a layout change occurs
-            // under the mouse.
-            // https://code.google.com/p/chromium/issues/detail?id=333623
-            return;
-        }
-        
-        switch (this._controlsState) {
-            case ControlsState.shown:
-                var insideTransportControls = false;
-                var element = <Node>eventObject.target;
-                while (element && element !== this._dom.root) {
-                    if (element === this._dom.transportControls) {
-                        insideTransportControls = true;
-                        break;
-                    }
-                    element = element.parentNode;
-                }
-                
-                if (insideTransportControls && this._hideControlsTimerToken) {
-                    _Global.clearTimeout(this._hideControlsTimerToken);
-                    this._hideControlsTimerToken = 0;
-                } else if (!insideTransportControls) {
-                    if (this._hideControlsTimerToken) {
-                        _Global.clearTimeout(this._hideControlsTimerToken);
-                        this._hideControlsTimerToken = 0;
-                    }
-                    this._hideControlsTimerToken = _Global.setTimeout(() => {
-                            this._hideControlsTimerToken = 0;
-                            this._playHideControlsAnimation();
-                        },
-                        controlsAutoHideDuration
-                    );
-                }
-                break;
-            case ControlsState.showing:
-                // No-op
-                break;
-            case ControlsState.hiding:
-            case ControlsState.hidden:
-                this._playShownControlsAnimation();
-            break;
-        }
     }
 }
 
