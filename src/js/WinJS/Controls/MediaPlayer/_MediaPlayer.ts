@@ -4,6 +4,8 @@
 // import Animations = require('../../Animations');
 import _Base = require('../../Core/_Base');
 import _BaseUtils = require('../../Core/_BaseUtils');
+import BindingList = require("../../BindingList");
+import _Command = require("../AppBar/_Command");
 import _Control = require('../../Utilities/_Control');
 import _Dispose = require('../../Utilities/_Dispose');
 import _ElementUtilities = require('../../Utilities/_ElementUtilities');
@@ -59,12 +61,20 @@ var ClassNames = {
     controls: "win-mediaplayer-controls",
     mediaPlayer: "win-mediaplayer",
     timeline: "win-mediaplayer-timeline",
+    toolBar: "win-mediaplayer-toolbar",
     transportControls: "win-mediaplayer-transportcontrols",
-    video: "win-mediaplayer-video"
+    video: "win-mediaplayer-video",
+    
+    // State
+    doubleRow: "win-mediaplayer-doublerow",
 };
 var EventNames = {
 };
 
+// TODO: Many icons aren't in Symbols.ttf and so don't work outside of Win10
+// TODO: How do reconcile initialization vs updateDom?
+//   - We want to change "hidden" property of these controls sometimes
+//   - In case of play/pause button, we want to change icon, label, etc.  
 var fullCommandList = [
     {
         internalVariableName: "_playFromBeginningButton",
@@ -394,6 +404,9 @@ export class MediaPlayer {
         _ElementUtilities.addClass(root, ClassNames.mediaPlayer);
         _ElementUtilities.addClass(root, "win-disposable");
         
+        // TODO: This should be done in updateDom
+        _ElementUtilities.addClass(root, ClassNames.doubleRow);
+        
         var contentEl = document.createElement("div");
         _ElementUtilities.addClass(contentEl, ClassNames.mediaPlayer);
         // TODO: Why did win-mediaplayer-timeline have class win-mediaplayer-thumbnailmode?
@@ -404,17 +417,33 @@ export class MediaPlayer {
                     '<div class="' + ClassNames.transportControls + '">' +
                         '<div class="' + ClassNames.timeline + '" tabIndex="0">' +
                         '</div>' +
-                        '<div class="' + ClassNames.commands + '"></div>' +
+                        '<div class="' + ClassNames.toolBar + ' ' + ClassNames.commands + '"></div>' +
                     '</div>' +
                 '</div>' +
             '</div>';
         root.appendChild(contentEl);
+        
+        var builtInCommands = fullCommandList.map((commandDesc) => {
+            var command = new _Command.AppBarCommand(null, commandDesc.options);
+            _ElementUtilities.addClass(command.element, commandDesc.classList);
+            return command;
+        });
+        // TODO: Support custom commands declaratively -- isDeclarativeControlContainer?
+        // var customCommands = Array.prototype.map.call(root.querySelectorAll("[data-win-control='WinJS.UI.Command']"), (commandEl: HTMLElement) => {
+        //     return commandEl["winControl"];
+        // });
+        var commandsBindingList = new BindingList.List(builtInCommands);
+        // commandsBindingList.splice(commandsBindingList.length, 0, customCommands);
+        var toolBar = new ToolBar.ToolBar(getElement(ClassNames.toolBar), {
+            data: commandsBindingList,
+            closedDisplayMode: ToolBar.ToolBar.ClosedDisplayMode.full
+        });
 
         this._dom = {
             root: root,
             content: contentEl,
             controls: getElement(ClassNames.controls),
-            toolBar: new ToolBar.ToolBar(getElement(ClassNames.commands))
+            toolBar: toolBar
         };
     }
 
