@@ -13,6 +13,7 @@ import _Global = require('../../Core/_Global');
 import _Hoverable = require('../../Utilities/_Hoverable');
 import _MediaElementAdapter = require('./_MediaElementAdapter');
 import Promise = require('../../Promise');
+import _Resources = require("../../Core/_Resources");
 import ToolBar = require("../ToolBar");
 import _IToolBar = require("../ToolBar/_ToolBar"); // Only used for type information
 // import _TransitionAnimation = require('../../Animations/_TransitionAnimation');
@@ -27,7 +28,29 @@ _Hoverable.isHoverable;
 
 var transformNames = _BaseUtils._browserStyleEquivalents["transform"];
 var Strings = {
-    get duplicateConstruction() { return "Invalid argument: Controls may only be instantiated one time for each DOM element"; }
+    get duplicateConstruction() { return "Invalid argument: Controls may only be instantiated one time for each DOM element"; },
+    
+    // Button labels
+    get mediaPlayerAudioTracksButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerAudioTracksButtonLabel").value; },
+    get mediaPlayerCastButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerCastButtonLabel").value; },
+    get mediaPlayerChapterSkipBackButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerChapterSkipBackButtonLabel").value; },
+    get mediaPlayerChapterSkipForwardButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerChapterSkipForwardButtonLabel").value; },
+    get mediaPlayerClosedCaptionsButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerClosedCaptionsButtonLabel").value; },
+    get mediaPlayerFastForwardButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerFastForwardButtonLabel").value; },
+    get mediaPlayerFullscreenButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerFullscreenButtonLabel").value; },
+    get mediaPlayerLiveButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerLiveButtonLabel").value; },
+    get mediaPlayerNextTrackButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerNextTrackButtonLabel").value; },
+    get mediaPlayerPlayButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerPlayButtonLabel").value; },
+    get mediaPlayerPlayFromBeginningButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerPlayFromBeginningButtonLabel").value; },
+    get mediaPlayerPlayRateButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerPlayRateButtonLabel").value; },
+    get mediaPlayerPreviousTrackButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerPreviousTrackButtonLabel").value; },
+    get mediaPlayerRewindButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerRewindButtonLabel").value; },
+    get mediaPlayerStopButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerStopButtonLabel").value; },
+    get mediaPlayerTimeSkipBackButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerTimeSkipBackButtonLabel").value; },
+    get mediaPlayerTimeSkipForwardButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerTimeSkipForwardButtonLabel").value; },
+    get mediaPlayerToggleSnapButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerToggleSnapButtonLabel").value; },
+    get mediaPlayerVolumeButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerVolumeButtonLabel").value; },
+    get mediaPlayerZoomButtonLabel() { return _Resources._getWinJSString("ui/mediaPlayerZoomButtonLabel").value; }
 };
 var ClassNames = {
     // Elements
@@ -41,6 +64,270 @@ var ClassNames = {
 };
 var EventNames = {
 };
+
+var fullCommandList = [
+    {
+        internalVariableName: "_playFromBeginningButton",
+        classList: "win-mediaplayer-playfrombeginningbutton",
+        options: {
+            id: "win-mediaplayer-playfrombeginning",
+            label: Strings.mediaPlayerPlayFromBeginningButtonLabel,
+            section: 'primary',
+            tooltip: Strings.mediaPlayerPlayFromBeginningButtonLabel,
+            priority: 19,
+            icon: "refresh",
+            hidden: true,
+            //onclick: this._onPlayFromBeginningCommandInvoked.bind(this)
+        },
+    },
+    {
+        internalVariableName: "_chapterSkipBackButton",
+        classList: "win-mediaplayer-chapterskipbackbutton",
+        options: {
+            id: "win-mediaplayer-chapterskipback",
+            label: Strings.mediaPlayerChapterSkipBackButtonLabel,
+            tooltip: Strings.mediaPlayerChapterSkipBackButtonLabel,
+            section: 'primary',
+            priority: 17,
+            icon: "back",
+            hidden: true,
+            //onclick: this._onChapterSkipBackCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_previousTrackButton",
+        classList: "win-mediaplayer-previoustrackbutton",
+        options: {
+            id: "win-mediaplayer-previoustrack",
+            label: Strings.mediaPlayerPreviousTrackButtonLabel,
+            tooltip: Strings.mediaPlayerPreviousTrackButtonLabel,
+            section: 'primary',
+            priority: 15,
+            icon: "previous",
+            hidden: true,
+            //onclick: this._onPlayFromBeginningCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_stopButton",
+        classList: "win-mediaplayer-stopbutton",
+        options: {
+            id: "win-mediaplayer-stop",
+            label: Strings.mediaPlayerStopButtonLabel,
+            tooltip: Strings.mediaPlayerStopButtonLabel,
+            section: 'primary',
+            priority: 18,
+            icon: "stop",
+            hidden: true,
+            //onclick: this._onStopCommandInvoked.bind(this)
+        },
+    },
+    {
+        internalVariableName: "_timeSkipBackButton",
+        classList: "win-mediaplayer-timeskipbackbutton",
+        options: {
+            id: "win-mediaplayer-timeskipback",
+            label: Strings.mediaPlayerTimeSkipBackButtonLabel,
+            tooltip: Strings.mediaPlayerTimeSkipBackButtonLabel,
+            section: 'primary',
+            priority: 11,
+            icon: "undo",
+            hidden: true,
+            //onclick: this._onTimeSkipBackCommandInvoked.bind(this)
+        },
+    },
+    {
+        internalVariableName: "_rewindButton",
+        classList: "win-mediaplayer-rewindbutton",
+        options: {
+            id: "win-mediaplayer-rewind",
+            label: Strings.mediaPlayerRewindButtonLabel,
+            tooltip: Strings.mediaPlayerRewindButtonLabel,
+            section: 'primary',
+            priority: 13,
+            icon: "previous",
+            hidden: true,
+            //onclick: this._onRewindCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_castButton",
+        classList: "win-mediaplayer-playonremotedevicebutton",
+        options: {
+            id: "win-mediaplayer-playonremotedevice",
+            label: Strings.mediaPlayerCastButtonLabel,
+            tooltip: Strings.mediaPlayerCastButtonLabel,
+            section: 'primary',
+            priority: 6,
+            icon: "\uEC15",
+            //onclick: this._onCastCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_zoomButton",
+        classList: "win-mediaplayer-zoombutton",
+        options: {
+            id: "win-mediaplayer-zoom",
+            label: Strings.mediaPlayerZoomButtonLabel,
+            tooltip: Strings.mediaPlayerZoomButtonLabel,
+            section: 'primary',
+            priority: 7,
+            icon: "\uE799",
+            //onclick: this._onZoomCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_audioTracksButton",
+        classList: "win-mediaplayer-audiotracksbutton",
+        options: {
+            id: "win-mediaplayer-audiotracks",
+            label: Strings.mediaPlayerAudioTracksButtonLabel,
+            tooltip: Strings.mediaPlayerAudioTracksButtonLabel,
+            priority: 8,
+            section: 'primary',
+            icon: "\uE8C1",
+            hidden: true,
+            //onclick: this._onAudioTracksCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_playPauseButton",
+        classList: "win-mediaplayer-playpausebutton",
+        options: {
+            id: "win-mediaplayer-playpause",
+            label: Strings.mediaPlayerPlayButtonLabel,
+            tooltip: Strings.mediaPlayerPlayButtonLabel,
+            section: 'primary',
+            priority: 1,
+            icon: "play",
+            //onclick: this._onPlayPauseCommandInvoked.bind(this)
+        },
+    },
+    {
+        internalVariableName: "_closedCaptionsButton",
+        classList: "win-mediaplayer-closedcaptionsbutton",
+        options: {
+            id: "win-mediaplayer-closedcaptions",
+            label: Strings.mediaPlayerClosedCaptionsButtonLabel,
+            tooltip: Strings.mediaPlayerClosedCaptionsButtonLabel,
+            section: 'primary',
+            priority: 4,
+            icon: "\uE7F0",
+            hidden: true,
+            //onclick: this._onClosedCaptionsCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_volumeButton",
+        classList: "win-mediaplayer-volumebutton",
+        options: {
+            id: "win-mediaplayer-volume",
+            label: Strings.mediaPlayerVolumeButtonLabel,
+            section: 'primary',
+            tooltip: Strings.mediaPlayerVolumeButtonLabel,
+            priority: 3,
+            icon: "volume",
+            //onclick: this._onVolumeCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_toggleFullScreenButton",
+        classList: "win-mediaplayer-fullscreenbutton",
+        options: {
+            id: "win-mediaplayer-fullscreen",
+            label: Strings.mediaPlayerFullscreenButtonLabel,
+            tooltip: Strings.mediaPlayerFullscreenButtonLabel,
+            section: 'primary',
+            priority: 5,
+            icon: "fullscreen",
+            //onclick: this._onToggleFullscreenCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_timeSkipForwardButton",
+        classList: "win-mediaplayer-timeskipforwardbutton",
+        options: {
+            id: "win-mediaplayer-timeskipforward",
+            label: Strings.mediaPlayerTimeSkipForwardButtonLabel,
+            tooltip: Strings.mediaPlayerTimeSkipForwardButtonLabel,
+            section: 'primary',
+            priority: 10,
+            icon: "redo",
+            hidden: true,
+            //onclick: this._onTimeSkipForwardCommandInvoked.bind(this)
+        },
+    },
+    {
+        internalVariableName: "_fastForwardButton",
+        classList: "win-mediaplayer-fastforwardbutton",
+        options: {
+            id: "win-mediaplayer-fastforward",
+            label: Strings.mediaPlayerFastForwardButtonLabel,
+            tooltip: Strings.mediaPlayerFastForwardButtonLabel,
+            priority: 12,
+            section: 'primary',
+            icon: "next",
+            hidden: true,
+            //onclick: this._onFastForwardCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_playbackRateButton",
+        classList: "win-mediaplayer-playbackratebutton",
+        options: {
+            id: "win-mediaplayer-playbackrate",
+            label: Strings.mediaPlayerPlayRateButtonLabel,
+            tooltip: Strings.mediaPlayerPlayRateButtonLabel,
+            section: 'primary',
+            priority: 9,
+            icon: "\uEC57",
+            hidden: true,
+            //onclick: this._onPlaybackRateCommandInvoked.bind(this)
+        },
+    },
+    {
+        internalVariableName: "_nextTrackButton",
+        classList: "win-mediaplayer-nexttrackbutton",
+        options: {
+            id: "win-mediaplayer-nexttrack",
+            label: Strings.mediaPlayerNextTrackButtonLabel,
+            tooltip: Strings.mediaPlayerNextTrackButtonLabel,
+            section: 'primary',
+            priority: 14,
+            icon: "next",
+            hidden: true,
+            //onclick: this._onNextTrackCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_chapterSkipForwardButton",
+        classList: "win-mediaplayer-chapterskipforwardbutton",
+        options: {
+            id: "win-mediaplayer-chapterskipforward",
+            label: Strings.mediaPlayerChapterSkipForwardButtonLabel,
+            tooltip: Strings.mediaPlayerChapterSkipForwardButtonLabel,
+            priority: 16,
+            section: 'primary',
+            icon: "forward",
+            hidden: true,
+            //onclick: this._onChapterSkipForwardCommandInvoked.bind(this)
+        }
+    },
+    {
+        internalVariableName: "_goToLiveButton",
+        classList: "win-mediaplayer-livebutton",
+        options: {
+            id: "win-mediaplayer-live",
+            label: Strings.mediaPlayerLiveButtonLabel,
+            tooltip: Strings.mediaPlayerLiveButtonLabel,
+            section: 'primary',
+            priority: 20,
+            icon: "gotostart",
+            hidden: true,
+            //onclick: this._onLiveButtonCommandInvoked.bind(this)
+        }
+    }
+];
 
 export class MediaPlayer {
 
