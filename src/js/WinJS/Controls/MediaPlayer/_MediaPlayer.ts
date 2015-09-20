@@ -35,32 +35,21 @@ function _() { } // no-op
 //
 
 // TODO: More cases to handle:
-//   - Pointer leaves MediaPlayer element
-//   - Pointer leaves window
-//   - A light dismissable is shown
-// TODO: How to handle case of mouse leaving MediaPlayer?
+//   - Pointer leaves MediaPlayer (instant hide?)
+//   - Pointer leaves window (instant hide?)
+//   - A light dismissable is shown (suspend auto hide timer?)
 // TODO: How to handle touch? pointerout, pointercancel
 
 // When AutoHider is in the "shown" state, the following restart the auto hide timer:
 //   - A pointer moving
 //   - A keydown
-// The auto hide timer gets suspended when the pointer moves over into a safe area. It
-// resumes when the pointer moves out of the safe area.
 
 interface IAutoHiderClient {
     element: HTMLElement;
-    isElementInSafeArea: Function;
     onShow: Function;
     onHide: Function;
     autoHideDuration: number;
 }
-
-enum AutoHideState {
-    shown,
-    showing,
-    hidden,
-    disposed
-};
 
 interface IAutoHiderState {
     // Debugging
@@ -125,17 +114,13 @@ module AutoHiderStates {
                 _Global.document.elementFromPoint(pointerPosition.x, pointerPosition.y) :
                 null;
                 
-            this.onPointerMove(element);
+            this._restartHideTimer();
         }
         exit() {
             this._clearHideTimer();
         }      
         onPointerMove(element: EventTarget) {
-            if (element && this.autoHider._client.isElementInSafeArea(element)) {
-                this.autoHider._setState(ShownSuspended);
-            } else {
-                this._restartHideTimer();
-            }
+            this._restartHideTimer();
         }
         onKeyDown() {
             this._restartHideTimer();
@@ -158,13 +143,12 @@ module AutoHiderStates {
         autoHider: AutoHider;
         name = "ShownSuspended";
         
+        // TODO: Start using this state. It'll be useful for suspending the
+        // auto hide timer while a light dismissable is visible
+        
         enter = _;
         exit = _;
-        onPointerMove(element: EventTarget) {
-            if (!element || !this.autoHider._client.isElementInSafeArea(element)) {
-                this.autoHider._setState(Shown);
-            }
-        }
+        onPointerMove = _;
         onKeyDown = _;
     }
     
@@ -292,7 +276,7 @@ var ClassNames = {
 var EventNames = {
 };
 
-var controlsAutoHideDuration = 500;
+var controlsAutoHideDuration = 3000;
 
 // TODO: Many icons aren't in Symbols.ttf and so don't work outside of Win10
 // TODO: How do reconcile initialization vs updateDom?
@@ -610,16 +594,6 @@ export class MediaPlayer {
             },
             onHide: () => {
                 this._playHideControlsAnimation();
-            },
-            isElementInSafeArea: (element: Node) => {
-                while (element && element !== this._dom.root) {
-                    if (element === this._dom.transportControls) {
-                        return true;
-                        break;
-                    }
-                    element = element.parentNode;
-                }
-                return false;
             }
         });
 
