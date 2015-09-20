@@ -28,12 +28,24 @@ require(["require-style!less/colors-mediaplayer"]);
 // Force-load Dependencies
 _Hoverable.isHoverable;
 
+function _() { } // no-op
+
 //
 // AutoHider
 //
 
+// TODO: More cases to handle:
+//   - Pointer leaves MediaPlayer element
+//   - Pointer leaves window
+//   - A light dismissable is shown
 // TODO: How to handle case of mouse leaving MediaPlayer?
 // TODO: How to handle touch? pointerout, pointercancel
+
+// When AutoHider is in the "shown" state, the following restart the auto hide timer:
+//   - A pointer moving
+//   - A keydown
+// The auto hide timer gets suspended when the pointer moves over into a safe area. It
+// resumes when the pointer moves out of the safe area.
 
 interface IAutoHiderClient {
     element: HTMLElement;
@@ -50,75 +62,163 @@ enum AutoHideState {
     disposed
 };
 
+interface IAutoHiderState {
+    // Debugging
+    name: string;
+    // State lifecyle
+    enter(): void;
+    exit(): void; // Immediately exit the state & cancel async work.
+    // API surface
+    onPointerMove(element: EventTarget): void;
+    onKeyDown(): void;
+    // Provided by _setState for use within the state
+    autoHider: AutoHider;
+}
+
+module AutoHiderStates {
+    export class Hidden implements IAutoHiderState {
+        autoHider: AutoHider;
+        name = "Hidden";
+        
+        enter = _;
+        exit = _;
+        onPointerMove() {
+            this.autoHider._setState(Showing);
+        }
+        onKeyDown = _;
+    }
+    
+    export class Showing implements IAutoHiderState {
+        autoHider: AutoHider;
+        name = "Showing";
+        
+        enter() {
+            this.autoHider._client.onShow();
+        }
+        exit = _;
+        onPointerMove = _;
+        onKeyDown = _;
+    }
+    
+    export class Shown implements IAutoHiderState {
+        autoHider: AutoHider;
+        name = "Shown";
+        
+        private _hideTimerToken: number;
+        private _clearHideTimer() {
+            if (this._hideTimerToken) {
+                _Global.clearTimeout(this._hideTimerToken);
+                this._hideTimerToken = 0;
+            }
+        }
+        private _restartHideTimer() {
+            this._clearHideTimer();
+            this._hideTimerToken = _Global.setTimeout(() => {
+                this.autoHider._setState(AutoHiderStates.Hiding);
+            }, this.autoHider._client.autoHideDuration);
+        }
+        
+        enter() {
+            var pointerPosition = this.autoHider._lastPointerPosition;
+            
+            var element = pointerPosition ?
+                _Global.document.elementFromPoint(pointerPosition.x, pointerPosition.y) :
+                null;
+                
+            this.onPointerMove(element);
+        }
+        exit() {
+            this._clearHideTimer();
+        }      
+        onPointerMove(element: EventTarget) {
+            if (element && this.autoHider._client.isElementInSafeArea(element)) {
+                this.autoHider._setState(ShownSuspended);
+            } else {
+                this._restartHideTimer();
+            }
+        }
+        onKeyDown() {
+            this._restartHideTimer();
+        }
+    }
+    
+    export class Hiding implements IAutoHiderState {
+        autoHider: AutoHider;
+        name = "Hiding";
+        
+        enter() {
+            this.autoHider._client.onHide();
+        }
+        exit = _;
+        onPointerMove = _;
+        onKeyDown = _;
+    }
+    
+    export class ShownSuspended implements IAutoHiderState {
+        autoHider: AutoHider;
+        name = "ShownSuspended";
+        
+        enter = _;
+        exit = _;
+        onPointerMove(element: EventTarget) {
+            if (!element || !this.autoHider._client.isElementInSafeArea(element)) {
+                this.autoHider._setState(Shown);
+            }
+        }
+        onKeyDown = _;
+    }
+    
+    export class Disposed implements IAutoHiderState {
+        autoHider: AutoHider;
+        name = "Disposed";
+        
+        enter = _;
+        exit = _;
+        onPointerMove = _;
+        onKeyDown = _;
+    }
+}
+
 class AutoHider {
-    private _client: IAutoHiderClient;
-    private _state: AutoHideState;
-    private _hideTimerToken: number;
-    private _lastPointerPosition: {x: number; y: number};
+    private _disposed: boolean;
+    private _state: IAutoHiderState;
+    _client: IAutoHiderClient;
+    _lastPointerPosition: {x: number; y: number};
     
     constructor(client: IAutoHiderClient) {
-        this._state = AutoHideState.hidden;
+        this._setState(AutoHiderStates.Hidden);
         this._client = client;
         
         this._onPointerMove = this._onPointerMove.bind(this);
+        this._onKeyDown = this._onKeyDown.bind(this);
         _ElementUtilities._addEventListener(this._client.element, "pointermove", this._onPointerMove);
+        this._client.element.addEventListener("keydown", this._onKeyDown);
     }
     
     shown() {
-        if (this._state === AutoHideState.disposed) { return; }
-        
-        this._state = AutoHideState.shown;
-        var element = this._lastPointerPosition ?
-            _Global.document.elementFromPoint(this._lastPointerPosition.x, this._lastPointerPosition.y) :
-            null;
-        this._pointerOnElementWhileShown(element)
-    }
-    
-    // TODO: Should we get rid of the public showing API and automatically
-    // move to showing after we fire "onShow"?
-    showing() {
-        if (this._state === AutoHideState.disposed) { return; }
-        
-        this._clearHideTimer();
-        this._state = AutoHideState.showing;
+        this._setState(AutoHiderStates.Shown);
     }
     
     hidden() {
-        if (this._state === AutoHideState.disposed) { return; }
-        
-        this._clearHideTimer();
-        this._state = AutoHideState.hidden;
+        this._setState(AutoHiderStates.Hidden);
     }
     
     dispose() {
-        if (this._state !== AutoHideState.disposed) {
-            this._clearHideTimer();
+        if (!this._disposed) {
+            this._setState(AutoHiderStates.Disposed);
             _ElementUtilities._removeEventListener(this._client.element, "pointermove", this._onPointerMove);
+            this._client.element.removeEventListener("keydown", this._onKeyDown);
             this._client = null;
-            this._state = AutoHideState.disposed;
+            this._disposed = true;
         }
     }
     
-    private _restartHideTimer() {
-        this._clearHideTimer();
-        this._hideTimerToken = _Global.setTimeout(() => {
-            this._hideTimerToken = 0;
-            this._client.onHide();
-        }, this._client.autoHideDuration);
-    }
-    
-    private _clearHideTimer() {
-        if (this._hideTimerToken) {
-            _Global.clearTimeout(this._hideTimerToken);
-            this._hideTimerToken = 0;
-        }
-    }
-    
-    private _pointerOnElementWhileShown(element: EventTarget) {
-        if (element && this._client.isElementInSafeArea(element)) {
-            this._clearHideTimer();
-        } else {
-            this._restartHideTimer();
+    _setState(NewState: any) {
+        if (!this._disposed) {
+            this._state && this._state.exit();
+            this._state = new NewState();
+            this._state.autoHider = this;
+            this._state.enter();
         }
     }
     
@@ -128,25 +228,19 @@ class AutoHider {
             y: eventObject.clientY
         };
         
-        switch (this._state) {
-            case AutoHideState.shown:
-                if (!(eventObject["movementX"] === 0 && eventObject["movementY"] === 0)) {
-                    // If the cursor hasn't moved, ignore the event. Works around a Chrome
-                    // bug where a mousemove event is generated when a layout change occurs
-                    // under the mouse.
-                    // https://code.google.com/p/chromium/issues/detail?id=333623
-                
-                    this._pointerOnElementWhileShown(eventObject.target);
-                }
-                break;
-            case AutoHideState.hidden:
-                this._client.onShow();
-                break;
-            case AutoHideState.disposed:
-            case AutoHideState.showing:
-                // no-op
-                break;
+        if (eventObject["movementX"] === 0 && eventObject["movementY"] === 0) {
+            // If the cursor hasn't moved, ignore the event. Works around a Chrome
+            // bug where a mousemove event is generated when a layout change occurs
+            // under the mouse.
+            // https://code.google.com/p/chromium/issues/detail?id=333623
+            return;
         }
+        
+        this._state.onPointerMove(eventObject.target);
+    }
+    
+    private _onKeyDown(eventObject: KeyboardEvent) {
+        this._state.onKeyDown();
     }
 }
 
@@ -512,7 +606,7 @@ export class MediaPlayer {
             element: this._dom.root,
             autoHideDuration: controlsAutoHideDuration,
             onShow: () => {
-                this._playShownControlsAnimation();
+                this._playShowControlsAnimation();
             },
             onHide: () => {
                 this._playHideControlsAnimation();
@@ -667,13 +761,12 @@ export class MediaPlayer {
         this._controlsAnimationPromise && this._controlsAnimationPromise.cancel();
     }
     
-    private _playShownControlsAnimation(): void {
+    private _playShowControlsAnimation(): void {
         this._prepareToAnimateControls();
         
         this._controlsState = ControlsState.showing;
         this._updateDomImpl();
         
-        this._autoHider.showing();
         Animations.fadeIn(this._dom.controls).done(() => {
             this._controlsState = ControlsState.shown;
             this._updateDomImpl();
