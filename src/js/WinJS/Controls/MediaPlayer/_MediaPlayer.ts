@@ -230,8 +230,44 @@ class AutoHider {
 }
 
 //
+// MediaElementAdapterWrapper
+//
+
+class MediaElementAdapterWrapper {
+    private _mediaElementAdapter: _MediaElementAdapter.MediaElementAdapter;
+    
+    constructor(mediaElementAdapter: _MediaElementAdapter.MediaElementAdapter) {
+        this._mediaElementAdapter = mediaElementAdapter;
+    }
+    
+    get paused(): boolean {
+        // TODO: What should happen if there's no mediaElement? Is that a real scenario?
+        //   Probably caller of this API needs to be aware of this case and handle it
+        //   specially (e.g. make the "play" button click a no-op)
+        var mediaElement = this._mediaElementAdapter && this._mediaElementAdapter.mediaElement;
+        return mediaElement ? mediaElement.paused : true;
+    }
+    
+    pause(): void {
+        // TODO: _mediaElement isn't required?
+        // TODO: How does _isPlayAllowed fit into this?
+        this._mediaElementAdapter && this._mediaElementAdapter.pause();
+    }
+    
+    play(): void {
+        // TODO: _mediaElement isn't required?
+        // TODO: How does _isPlayAllowed fit into this?
+        this._mediaElementAdapter && this._mediaElementAdapter.play();
+    }
+}
+
+//
 // MediaPlayer
 //
+
+// TODO: Missing strings for:
+//   - Pause tooltip/label
+//   - Exit full screet tooltip/label
 
 var transformNames = _BaseUtils._browserStyleEquivalents["transform"];
 var Strings = {
@@ -279,284 +315,17 @@ var EventNames = {
 
 var controlsAutoHideDuration = 3000;
 
-// TODO: Bring back labels. We need them for screen readers. They are commented out
-//   because AppBarCommands don't show their tooltips when the tooltip is the same as
-//   the label. Should we remove this behavior? Is it the app's fault for making
-//   them the same?
-// TODO: Many icons aren't in Symbols.ttf and so don't work outside of Win10
-// TODO: How do reconcile initialization vs updateDom?
-//   - We want to change "hidden" property of these controls sometimes
-//   - In case of play/pause button, we want to change icon, label, etc.  
-var fullCommandList = [
-    {
-        internalVariableName: "_playFromBeginningButton",
-        classList: "win-mediaplayer-playfrombeginningbutton",
-        options: {
-            id: "win-mediaplayer-playfrombeginning",
-            //label: Strings.mediaPlayerPlayFromBeginningButtonLabel,
-            section: 'primary',
-            tooltip: Strings.mediaPlayerPlayFromBeginningButtonLabel,
-            priority: 19,
-            icon: "refresh",
-            hidden: true,
-            //onclick: this._onPlayFromBeginningCommandInvoked.bind(this)
-        },
-    },
-    {
-        internalVariableName: "_chapterSkipBackButton",
-        classList: "win-mediaplayer-chapterskipbackbutton",
-        options: {
-            id: "win-mediaplayer-chapterskipback",
-            //label: Strings.mediaPlayerChapterSkipBackButtonLabel,
-            tooltip: Strings.mediaPlayerChapterSkipBackButtonLabel,
-            section: 'primary',
-            priority: 17,
-            icon: "back",
-            hidden: true,
-            //onclick: this._onChapterSkipBackCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_previousTrackButton",
-        classList: "win-mediaplayer-previoustrackbutton",
-        options: {
-            id: "win-mediaplayer-previoustrack",
-            //label: Strings.mediaPlayerPreviousTrackButtonLabel,
-            tooltip: Strings.mediaPlayerPreviousTrackButtonLabel,
-            section: 'primary',
-            priority: 15,
-            icon: "previous",
-            hidden: true,
-            //onclick: this._onPlayFromBeginningCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_stopButton",
-        classList: "win-mediaplayer-stopbutton",
-        options: {
-            id: "win-mediaplayer-stop",
-            //label: Strings.mediaPlayerStopButtonLabel,
-            tooltip: Strings.mediaPlayerStopButtonLabel,
-            section: 'primary',
-            priority: 18,
-            icon: "stop",
-            hidden: true,
-            //onclick: this._onStopCommandInvoked.bind(this)
-        },
-    },
-    {
-        internalVariableName: "_timeSkipBackButton",
-        classList: "win-mediaplayer-timeskipbackbutton",
-        options: {
-            id: "win-mediaplayer-timeskipback",
-            //label: Strings.mediaPlayerTimeSkipBackButtonLabel,
-            tooltip: Strings.mediaPlayerTimeSkipBackButtonLabel,
-            section: 'primary',
-            priority: 11,
-            icon: "undo",
-            hidden: true,
-            //onclick: this._onTimeSkipBackCommandInvoked.bind(this)
-        },
-    },
-    {
-        internalVariableName: "_rewindButton",
-        classList: "win-mediaplayer-rewindbutton",
-        options: {
-            id: "win-mediaplayer-rewind",
-            //label: Strings.mediaPlayerRewindButtonLabel,
-            tooltip: Strings.mediaPlayerRewindButtonLabel,
-            section: 'primary',
-            priority: 13,
-            icon: "previous",
-            hidden: true,
-            //onclick: this._onRewindCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_castButton",
-        classList: "win-mediaplayer-playonremotedevicebutton",
-        options: {
-            id: "win-mediaplayer-playonremotedevice",
-            //label: Strings.mediaPlayerCastButtonLabel,
-            tooltip: Strings.mediaPlayerCastButtonLabel,
-            section: 'primary',
-            priority: 6,
-            icon: "\uEC15",
-            //onclick: this._onCastCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_zoomButton",
-        classList: "win-mediaplayer-zoombutton",
-        options: {
-            id: "win-mediaplayer-zoom",
-            //label: Strings.mediaPlayerZoomButtonLabel,
-            tooltip: Strings.mediaPlayerZoomButtonLabel,
-            section: 'primary',
-            priority: 7,
-            icon: "\uE799",
-            //onclick: this._onZoomCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_audioTracksButton",
-        classList: "win-mediaplayer-audiotracksbutton",
-        options: {
-            id: "win-mediaplayer-audiotracks",
-            //label: Strings.mediaPlayerAudioTracksButtonLabel,
-            tooltip: Strings.mediaPlayerAudioTracksButtonLabel,
-            priority: 8,
-            section: 'primary',
-            icon: "\uE8C1",
-            hidden: true,
-            //onclick: this._onAudioTracksCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_playPauseButton",
-        classList: "win-mediaplayer-playpausebutton",
-        options: {
-            id: "win-mediaplayer-playpause",
-            //label: Strings.mediaPlayerPlayButtonLabel,
-            tooltip: Strings.mediaPlayerPlayButtonLabel,
-            section: 'primary',
-            priority: 1,
-            icon: "play",
-            //onclick: this._onPlayPauseCommandInvoked.bind(this)
-        },
-    },
-    {
-        internalVariableName: "_closedCaptionsButton",
-        classList: "win-mediaplayer-closedcaptionsbutton",
-        options: {
-            id: "win-mediaplayer-closedcaptions",
-            //label: Strings.mediaPlayerClosedCaptionsButtonLabel,
-            tooltip: Strings.mediaPlayerClosedCaptionsButtonLabel,
-            section: 'primary',
-            priority: 4,
-            icon: "\uE7F0",
-            hidden: true,
-            //onclick: this._onClosedCaptionsCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_volumeButton",
-        classList: "win-mediaplayer-volumebutton",
-        options: {
-            id: "win-mediaplayer-volume",
-            //label: Strings.mediaPlayerVolumeButtonLabel,
-            section: 'primary',
-            tooltip: Strings.mediaPlayerVolumeButtonLabel,
-            priority: 3,
-            icon: "volume",
-            //onclick: this._onVolumeCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_toggleFullScreenButton",
-        classList: "win-mediaplayer-fullscreenbutton",
-        options: {
-            id: "win-mediaplayer-fullscreen",
-            //label: Strings.mediaPlayerFullscreenButtonLabel,
-            tooltip: Strings.mediaPlayerFullscreenButtonLabel,
-            section: 'primary',
-            priority: 5,
-            icon: "fullscreen",
-            //onclick: this._onToggleFullscreenCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_timeSkipForwardButton",
-        classList: "win-mediaplayer-timeskipforwardbutton",
-        options: {
-            id: "win-mediaplayer-timeskipforward",
-            //label: Strings.mediaPlayerTimeSkipForwardButtonLabel,
-            tooltip: Strings.mediaPlayerTimeSkipForwardButtonLabel,
-            section: 'primary',
-            priority: 10,
-            icon: "redo",
-            hidden: true,
-            //onclick: this._onTimeSkipForwardCommandInvoked.bind(this)
-        },
-    },
-    {
-        internalVariableName: "_fastForwardButton",
-        classList: "win-mediaplayer-fastforwardbutton",
-        options: {
-            id: "win-mediaplayer-fastforward",
-            //label: Strings.mediaPlayerFastForwardButtonLabel,
-            tooltip: Strings.mediaPlayerFastForwardButtonLabel,
-            priority: 12,
-            section: 'primary',
-            icon: "next",
-            hidden: true,
-            //onclick: this._onFastForwardCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_playbackRateButton",
-        classList: "win-mediaplayer-playbackratebutton",
-        options: {
-            id: "win-mediaplayer-playbackrate",
-            //label: Strings.mediaPlayerPlayRateButtonLabel,
-            tooltip: Strings.mediaPlayerPlayRateButtonLabel,
-            section: 'primary',
-            priority: 9,
-            icon: "\uEC57",
-            hidden: true,
-            //onclick: this._onPlaybackRateCommandInvoked.bind(this)
-        },
-    },
-    {
-        internalVariableName: "_nextTrackButton",
-        classList: "win-mediaplayer-nexttrackbutton",
-        options: {
-            id: "win-mediaplayer-nexttrack",
-            //label: Strings.mediaPlayerNextTrackButtonLabel,
-            tooltip: Strings.mediaPlayerNextTrackButtonLabel,
-            section: 'primary',
-            priority: 14,
-            icon: "next",
-            hidden: true,
-            //onclick: this._onNextTrackCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_chapterSkipForwardButton",
-        classList: "win-mediaplayer-chapterskipforwardbutton",
-        options: {
-            id: "win-mediaplayer-chapterskipforward",
-            //label: Strings.mediaPlayerChapterSkipForwardButtonLabel,
-            tooltip: Strings.mediaPlayerChapterSkipForwardButtonLabel,
-            priority: 16,
-            section: 'primary',
-            icon: "forward",
-            hidden: true,
-            //onclick: this._onChapterSkipForwardCommandInvoked.bind(this)
-        }
-    },
-    {
-        internalVariableName: "_goToLiveButton",
-        classList: "win-mediaplayer-livebutton",
-        options: {
-            id: "win-mediaplayer-live",
-            //label: Strings.mediaPlayerLiveButtonLabel,
-            tooltip: Strings.mediaPlayerLiveButtonLabel,
-            section: 'primary',
-            priority: 20,
-            icon: "gotostart",
-            hidden: true,
-            //onclick: this._onLiveButtonCommandInvoked.bind(this)
-        }
-    }
-];
-
 enum ControlsState {
     shown,
     showing,
     hiding,
     hidden
 };
+
+interface ICommandDescription {
+    classList: string;
+    options: any;
+}
 
 export class MediaPlayer {
 
@@ -567,14 +336,70 @@ export class MediaPlayer {
     private _initialized: boolean;
     private _disposed: boolean;
     private _dom: {
-        root: HTMLElement;
+        commands: {
+            // TODO: Instead of repeating these keys so many times, is there a way
+            //   to reuse the same key set with different value types. For example:
+            //     enum Abc {
+            //         One,
+            //         Two,
+            //         Three
+            //     };
+            //
+            //     var x: { [k: Abc]: number};
+            audioTracks: _Command.AppBarCommand;
+            cast: _Command.AppBarCommand;
+            chapterSkipBack: _Command.AppBarCommand;
+            chapterSkipForward: _Command.AppBarCommand;
+            closedCaptions: _Command.AppBarCommand;
+            fastForward: _Command.AppBarCommand;
+            goToLive: _Command.AppBarCommand;
+            nextTrack: _Command.AppBarCommand;
+            playbackRate: _Command.AppBarCommand;
+            playFromBeginning: _Command.AppBarCommand;
+            playPause: _Command.AppBarCommand;
+            previousTrack: _Command.AppBarCommand;
+            rewind: _Command.AppBarCommand;
+            stop: _Command.AppBarCommand;
+            timeSkipBack: _Command.AppBarCommand;
+            timeSkipForward: _Command.AppBarCommand;
+            toggleFullScreen: _Command.AppBarCommand;
+            volume: _Command.AppBarCommand;
+            zoom: _Command.AppBarCommand;
+        };
         content: HTMLElement;
         controls: HTMLElement;
+        root: HTMLElement;
         toolBar: _IToolBar.ToolBar;
         transportControls: HTMLElement;
     };
     
     // Controls management
+    private _commandDescriptions: {
+        audioTracks: ICommandDescription;
+        cast: ICommandDescription;
+        chapterSkipBack: ICommandDescription;
+        chapterSkipForward: ICommandDescription;
+        closedCaptions: ICommandDescription;
+        fastForward: ICommandDescription;
+        goToLive: ICommandDescription;
+        nextTrack: ICommandDescription;
+        playbackRate: ICommandDescription;
+        playFromBeginning: ICommandDescription;
+        playPause: ICommandDescription;
+        previousTrack: ICommandDescription;
+        rewind: ICommandDescription;
+        stop: ICommandDescription;
+        timeSkipBack: ICommandDescription;
+        timeSkipForward: ICommandDescription;
+        toggleFullScreen: ICommandDescription;
+        volume: ICommandDescription;
+        zoom: ICommandDescription;
+    };
+    private _commandOrderings: {
+        full: _Command.AppBarCommand[];
+        compact: _Command.AppBarCommand[];
+    };
+    private _fullCommandList: ICommandDescription[];
     private _autoHider: AutoHider;
     private _controlsState: ControlsState;
     private _controlsAnimationPromise: Promise<any>;
@@ -584,7 +409,8 @@ export class MediaPlayer {
         if (element && element["winControl"]) {
             throw new _ErrorFromName("WinJS.UI.MediaPlayer.DuplicateConstruction", Strings.duplicateConstruction);
         }
-
+        
+        this._commandDescriptions = this._generateCommandDescriptions();
         this._initializeDom(element || _Global.document.createElement("div"));
 
         // Initialize private state.
@@ -616,12 +442,34 @@ export class MediaPlayer {
         return this._dom.root;
     }
     
-    private _mediaElementAdapter: _MediaElementAdapter.MediaElementAdapter;
+    // MediaPlayer should never interact directly with:
+    //   - the media element
+    //   - _nakedMediaElementAdapter: This is the one that comes from the app. It has a
+    //     small API surface representing the hooks we want app developers to have.
+    // Instead, the MediaPlayer should always interact with _mediaElementAdapter
+    // (a MediaElementAdapterWrapper). It has the full API surface of the media element
+    // that is used by the MediaPlayer. When appropriate, MediaElementAdapterWrapper will
+    // forward calls to the _nakedMediaElementAdapter. In all other cases,
+    // MediaElementAdapterWrapper will interact directly with the media element.
+    // The idea here is that the MediaPlayer code never has to worry about if it needs to
+    // give a call to the MediaElementAdapter or if it should talk directly to the media
+    // element. It's the MediaElementAdapterWrapper's responsibility to worry about that.
+    private _mediaElementAdapter: MediaElementAdapterWrapper;
+    private _nakedMediaElementAdapter: _MediaElementAdapter.MediaElementAdapter;
     get mediaElementAdapter(): _MediaElementAdapter.MediaElementAdapter {
-        return this._mediaElementAdapter;
+        return this._nakedMediaElementAdapter;
     }
     set mediaElementAdapter(value: _MediaElementAdapter.MediaElementAdapter) {
-        this._mediaElementAdapter = value;
+        this._nakedMediaElementAdapter = value;
+        this._mediaElementAdapter = new MediaElementAdapterWrapper(value);
+    }
+    
+    pause(): void {
+        this._mediaElementAdapter.pause();
+    }
+    
+    play(): void {
+        this._mediaElementAdapter.play();
     }
 
     dispose(): void {
@@ -630,6 +478,261 @@ export class MediaPlayer {
         }
         this._disposed = true;
         this._autoHider.dispose();
+    }
+    
+    private _generateCommandDescriptions() {
+        // TODO: Bring back labels. We need them for screen readers. They are commented out
+        //   because AppBarCommands don't show their tooltips when the tooltip is the same as
+        //   the label. Should we remove this behavior? Is it the app's fault for making
+        //   them the same?
+        // TODO: Many icons aren't in Symbols.ttf and so don't work outside of Win10
+        // TODO: How do reconcile initialization vs updateDom?
+        //   - We want to change "hidden" property of these controls sometimes
+        //   - In case of play/pause button, we want to change icon, label, etc.
+        return {
+            audioTracks: {
+                classList: "win-mediaplayer-audiotracksbutton",
+                options: {
+                    id: "win-mediaplayer-audiotracks",
+                    //label: Strings.mediaPlayerAudioTracksButtonLabel,
+                    tooltip: Strings.mediaPlayerAudioTracksButtonLabel,
+                    priority: 8,
+                    section: 'primary',
+                    icon: "\uE8C1",
+                    hidden: true,
+                    //onclick: this._onAudioTracksCommandInvoked.bind(this)
+                }
+            },
+            cast: {
+                classList: "win-mediaplayer-playonremotedevicebutton",
+                options: {
+                    id: "win-mediaplayer-playonremotedevice",
+                    //label: Strings.mediaPlayerCastButtonLabel,
+                    tooltip: Strings.mediaPlayerCastButtonLabel,
+                    section: 'primary',
+                    priority: 6,
+                    icon: "\uEC15",
+                    //onclick: this._onCastCommandInvoked.bind(this)
+                }
+            },
+            chapterSkipBack: {
+                classList: "win-mediaplayer-chapterskipbackbutton",
+                options: {
+                    id: "win-mediaplayer-chapterskipback",
+                    //label: Strings.mediaPlayerChapterSkipBackButtonLabel,
+                    tooltip: Strings.mediaPlayerChapterSkipBackButtonLabel,
+                    section: 'primary',
+                    priority: 17,
+                    icon: "back",
+                    hidden: true,
+                    //onclick: this._onChapterSkipBackCommandInvoked.bind(this)
+                }
+            },
+            chapterSkipForward: {
+                classList: "win-mediaplayer-chapterskipforwardbutton",
+                options: {
+                    id: "win-mediaplayer-chapterskipforward",
+                    //label: Strings.mediaPlayerChapterSkipForwardButtonLabel,
+                    tooltip: Strings.mediaPlayerChapterSkipForwardButtonLabel,
+                    priority: 16,
+                    section: 'primary',
+                    icon: "forward",
+                    hidden: true,
+                    //onclick: this._onChapterSkipForwardCommandInvoked.bind(this)
+                }
+            },
+            closedCaptions: {
+                classList: "win-mediaplayer-closedcaptionsbutton",
+                options: {
+                    id: "win-mediaplayer-closedcaptions",
+                    //label: Strings.mediaPlayerClosedCaptionsButtonLabel,
+                    tooltip: Strings.mediaPlayerClosedCaptionsButtonLabel,
+                    section: 'primary',
+                    priority: 4,
+                    icon: "\uE7F0",
+                    hidden: true,
+                    //onclick: this._onClosedCaptionsCommandInvoked.bind(this)
+                }
+            },
+            fastForward: {
+                classList: "win-mediaplayer-fastforwardbutton",
+                options: {
+                    id: "win-mediaplayer-fastforward",
+                    //label: Strings.mediaPlayerFastForwardButtonLabel,
+                    tooltip: Strings.mediaPlayerFastForwardButtonLabel,
+                    priority: 12,
+                    section: 'primary',
+                    icon: "next",
+                    hidden: true,
+                    //onclick: this._onFastForwardCommandInvoked.bind(this)
+                }
+            },
+            goToLive: {
+                classList: "win-mediaplayer-livebutton",
+                options: {
+                    id: "win-mediaplayer-live",
+                    //label: Strings.mediaPlayerLiveButtonLabel,
+                    tooltip: Strings.mediaPlayerLiveButtonLabel,
+                    section: 'primary',
+                    priority: 20,
+                    icon: "gotostart",
+                    hidden: true,
+                    //onclick: this._onLiveButtonCommandInvoked.bind(this)
+                }
+            },
+            nextTrack: {
+                classList: "win-mediaplayer-nexttrackbutton",
+                options: {
+                    id: "win-mediaplayer-nexttrack",
+                    //label: Strings.mediaPlayerNextTrackButtonLabel,
+                    tooltip: Strings.mediaPlayerNextTrackButtonLabel,
+                    section: 'primary',
+                    priority: 14,
+                    icon: "next",
+                    hidden: true,
+                    //onclick: this._onNextTrackCommandInvoked.bind(this)
+                }
+            },
+            playbackRate: {
+                classList: "win-mediaplayer-playbackratebutton",
+                options: {
+                    id: "win-mediaplayer-playbackrate",
+                    //label: Strings.mediaPlayerPlayRateButtonLabel,
+                    tooltip: Strings.mediaPlayerPlayRateButtonLabel,
+                    section: 'primary',
+                    priority: 9,
+                    icon: "\uEC57",
+                    hidden: true,
+                    //onclick: this._onPlaybackRateCommandInvoked.bind(this)
+                },
+            },
+            playFromBeginning: {
+                classList: "win-mediaplayer-playfrombeginningbutton",
+                options: {
+                    id: "win-mediaplayer-playfrombeginning",
+                    //label: Strings.mediaPlayerPlayFromBeginningButtonLabel,
+                    section: 'primary',
+                    tooltip: Strings.mediaPlayerPlayFromBeginningButtonLabel,
+                    priority: 19,
+                    icon: "refresh",
+                    hidden: true,
+                    //onclick: this._onPlayFromBeginningCommandInvoked.bind(this)
+                }
+            },
+            playPause: {
+                classList: "win-mediaplayer-playpausebutton",
+                options: {
+                    id: "win-mediaplayer-playpause",
+                    //label: Strings.mediaPlayerPlayButtonLabel,
+                    tooltip: Strings.mediaPlayerPlayButtonLabel,
+                    section: 'primary',
+                    priority: 1,
+                    icon: "play",
+                    onclick: this._onCommandPlay.bind(this)
+                },
+            },
+            previousTrack: {
+                classList: "win-mediaplayer-previoustrackbutton",
+                options: {
+                    id: "win-mediaplayer-previoustrack",
+                    //label: Strings.mediaPlayerPreviousTrackButtonLabel,
+                    tooltip: Strings.mediaPlayerPreviousTrackButtonLabel,
+                    section: 'primary',
+                    priority: 15,
+                    icon: "previous",
+                    hidden: true,
+                    //onclick: this._onPlayFromBeginningCommandInvoked.bind(this)
+                }
+            },
+            rewind: {
+                classList: "win-mediaplayer-rewindbutton",
+                options: {
+                    id: "win-mediaplayer-rewind",
+                    //label: Strings.mediaPlayerRewindButtonLabel,
+                    tooltip: Strings.mediaPlayerRewindButtonLabel,
+                    section: 'primary',
+                    priority: 13,
+                    icon: "previous",
+                    hidden: true,
+                    //onclick: this._onRewindCommandInvoked.bind(this)
+                }
+            },
+            stop: {
+                classList: "win-mediaplayer-stopbutton",
+                options: {
+                    id: "win-mediaplayer-stop",
+                    //label: Strings.mediaPlayerStopButtonLabel,
+                    tooltip: Strings.mediaPlayerStopButtonLabel,
+                    section: 'primary',
+                    priority: 18,
+                    icon: "stop",
+                    hidden: true,
+                    //onclick: this._onStopCommandInvoked.bind(this)
+                },
+            },
+            timeSkipBack: {
+                classList: "win-mediaplayer-timeskipbackbutton",
+                options: {
+                    id: "win-mediaplayer-timeskipback",
+                    //label: Strings.mediaPlayerTimeSkipBackButtonLabel,
+                    tooltip: Strings.mediaPlayerTimeSkipBackButtonLabel,
+                    section: 'primary',
+                    priority: 11,
+                    icon: "undo",
+                    hidden: true,
+                    //onclick: this._onTimeSkipBackCommandInvoked.bind(this)
+                },
+            },
+            timeSkipForward: {
+                classList: "win-mediaplayer-timeskipforwardbutton",
+                options: {
+                    id: "win-mediaplayer-timeskipforward",
+                    //label: Strings.mediaPlayerTimeSkipForwardButtonLabel,
+                    tooltip: Strings.mediaPlayerTimeSkipForwardButtonLabel,
+                    section: 'primary',
+                    priority: 10,
+                    icon: "redo",
+                    hidden: true,
+                    //onclick: this._onTimeSkipForwardCommandInvoked.bind(this)
+                },
+            },
+            toggleFullScreen: {
+                classList: "win-mediaplayer-fullscreenbutton",
+                options: {
+                    id: "win-mediaplayer-fullscreen",
+                    //label: Strings.mediaPlayerFullscreenButtonLabel,
+                    tooltip: Strings.mediaPlayerFullscreenButtonLabel,
+                    section: 'primary',
+                    priority: 5,
+                    icon: "fullscreen",
+                    //onclick: this._onToggleFullscreenCommandInvoked.bind(this)
+                }
+            },
+            volume: {
+                classList: "win-mediaplayer-volumebutton",
+                options: {
+                    id: "win-mediaplayer-volume",
+                    //label: Strings.mediaPlayerVolumeButtonLabel,
+                    section: 'primary',
+                    tooltip: Strings.mediaPlayerVolumeButtonLabel,
+                    priority: 3,
+                    icon: "volume",
+                    //onclick: this._onVolumeCommandInvoked.bind(this)
+                }
+            },
+            zoom: {
+                classList: "win-mediaplayer-zoombutton",
+                options: {
+                    id: "win-mediaplayer-zoom",
+                    //label: Strings.mediaPlayerZoomButtonLabel,
+                    tooltip: Strings.mediaPlayerZoomButtonLabel,
+                    section: 'primary',
+                    priority: 7,
+                    icon: "\uE799",
+                    //onclick: this._onZoomCommandInvoked.bind(this)
+                }
+            }
+        };
     }
 
     private _initializeDom(root: HTMLElement): void {
@@ -660,26 +763,95 @@ export class MediaPlayer {
             '</div>';
         root.appendChild(contentEl);
         
-        var builtInCommands = fullCommandList.map((commandDesc) => {
+        var makeCommand = (commandDesc: ICommandDescription): _Command.AppBarCommand => {
             var command = new _Command.AppBarCommand(null, commandDesc.options);
             _ElementUtilities.addClass(command.element, commandDesc.classList);
             return command;
-        });
+        };
+        
+        var commandDescriptions = this._commandDescriptions;
+        var commands = {
+            audioTracks: makeCommand(commandDescriptions.audioTracks),
+            cast: makeCommand(commandDescriptions.cast),
+            chapterSkipBack: makeCommand(commandDescriptions.chapterSkipBack),
+            chapterSkipForward: makeCommand(commandDescriptions.chapterSkipForward),
+            closedCaptions: makeCommand(commandDescriptions.closedCaptions),
+            fastForward: makeCommand(commandDescriptions.fastForward),
+            goToLive: makeCommand(commandDescriptions.goToLive),
+            nextTrack: makeCommand(commandDescriptions.nextTrack),
+            playbackRate: makeCommand(commandDescriptions.playbackRate),
+            playFromBeginning: makeCommand(commandDescriptions.playFromBeginning),
+            playPause: makeCommand(commandDescriptions.playPause),
+            previousTrack: makeCommand(commandDescriptions.previousTrack),
+            rewind: makeCommand(commandDescriptions.rewind),
+            stop: makeCommand(commandDescriptions.stop),
+            timeSkipBack: makeCommand(commandDescriptions.timeSkipBack),
+            timeSkipForward: makeCommand(commandDescriptions.timeSkipForward),
+            toggleFullScreen: makeCommand(commandDescriptions.toggleFullScreen),
+            volume: makeCommand(commandDescriptions.volume),
+            zoom: makeCommand(commandDescriptions.zoom)
+        };
+        this._commandOrderings = {
+            full: [
+                commands.playFromBeginning,
+                commands.chapterSkipBack,
+                commands.previousTrack,
+                commands.stop,
+                commands.timeSkipBack,
+                commands.rewind,
+                commands.cast,
+                commands.zoom,
+                commands.audioTracks,
+                commands.playPause,
+                commands.closedCaptions,
+                commands.volume,
+                commands.toggleFullScreen,
+                commands.timeSkipForward,
+                commands.fastForward,
+                commands.playbackRate,
+                commands.nextTrack,
+                commands.chapterSkipForward,
+                commands.goToLive
+            ],
+            compact: [
+                commands.playPause,
+                commands.playFromBeginning,
+                commands.chapterSkipBack,
+                commands.previousTrack,
+                commands.stop,
+                commands.timeSkipBack,
+                commands.rewind,
+                commands.cast,
+                commands.zoom,
+                commands.audioTracks,
+                commands.closedCaptions,
+                commands.volume,
+                commands.toggleFullScreen,
+                commands.timeSkipForward,
+                commands.fastForward,
+                commands.playbackRate,
+                commands.nextTrack,
+                commands.chapterSkipForward,
+                commands.goToLive
+            ]
+        };
+        
         // TODO: Support custom commands declaratively -- isDeclarativeControlContainer?
         // var customCommands = Array.prototype.map.call(root.querySelectorAll("[data-win-control='WinJS.UI.Command']"), (commandEl: HTMLElement) => {
         //     return commandEl["winControl"];
         // });
-        var commandsBindingList = new BindingList.List(builtInCommands);
+        var commandsBindingList = new BindingList.List(this._commandOrderings.full);
         // commandsBindingList.splice(commandsBindingList.length, 0, customCommands);
         var toolBar = new ToolBar.ToolBar(getElement(ClassNames.toolBar), {
             data: commandsBindingList,
             closedDisplayMode: ToolBar.ToolBar.ClosedDisplayMode.full
         });
-
+        
         this._dom = {
-            root: root,
+            commands: commands,
             content: contentEl,
             controls: getElement(ClassNames.controls),
+            root: root,
             toolBar: toolBar,
             transportControls: getElement(ClassNames.transportControls)
         };
@@ -692,7 +864,8 @@ export class MediaPlayer {
     // rendered.
     private _updateDomImpl_rendered = {
         controlsShown: <boolean>undefined,
-        mediaElement: <HTMLMediaElement>undefined
+        mediaElement: <HTMLMediaElement>undefined,
+        playPauseButtonIsPlay: <boolean>undefined
     };
     private _updateDomImpl(): void {
         if (!this._initialized) {
@@ -715,6 +888,30 @@ export class MediaPlayer {
                 this._dom.controls.parentNode.insertBefore(mediaElement, this._dom.controls);
             }
             rendered.mediaElement = mediaElement;
+        }
+        
+        // TODO: How should we determine which state we're in? Reading from media element adapter
+        //   is like reading from DOM so not too good. We want the control to track its own state.
+        // TODO: How do we get informed that this._mediaElementAdapter.paused has changed and our
+        //   UI is stale? No telling when custom MediaPlayerAdapter might decide to mutate media
+        //   element... Is media element the source of truth? If somebody clicks "play", do we
+        //   immediately switch to the "playing" UI even though media element might not have
+        //   started playing yet?
+        var playPauseButtonIsPlay = this._mediaElementAdapter.paused;
+        if (rendered.playPauseButtonIsPlay !== playPauseButtonIsPlay) {
+            if (playPauseButtonIsPlay) {
+                this._dom.commands.playPause.icon = "play";
+                // TODO: Can't set label because it'll prevent the tooltip from showing
+                //this._dom.commands.playPause.label = Strings.mediaPlayerPlayButtonLabel;
+                this._dom.commands.playPause.tooltip = Strings.mediaPlayerPlayButtonLabel;
+                this._dom.commands.playPause.onclick = this._onCommandPlay.bind(this);
+            } else {
+                this._dom.commands.playPause.icon = "pause";
+                // TODO: Can't set label because it'll prevent the tooltip from showing
+                //this._dom.commands.playPause.label = "Pause";
+                this._dom.commands.playPause.tooltip = "Pause";
+                this._dom.commands.playPause.onclick = this._onCommandPause.bind(this);
+            }
         }
         
         var controlsShown = this._controlsState === ControlsState.hiding ||
@@ -764,6 +961,31 @@ export class MediaPlayer {
             this._updateDomImpl();
             this._autoHider.hidden();
         });
+    }
+    
+    // Click handlers for commands
+    //
+    
+    private _onCommandPlay(eventObject: MouseEvent) {
+        // TODO: Should MediaPlayer have internal play/pause state that it looks at instead
+        //  of reading from the DOM?
+        // TODO: Should MediaPlayer change the event handler on the play/pause button so we have
+        //   onCommandPlay and onCommandPause instead of onCommandPlayPause?
+        this.play();
+        
+        // TODO: Hack to kick UI for now
+        this._updateDomImpl();
+    }
+    
+    private _onCommandPause(eventObject: MouseEvent) {
+        // TODO: Should MediaPlayer have internal play/pause state that it looks at instead
+        //  of reading from the DOM?
+        // TODO: Should MediaPlayer change the event handler on the play/pause button so we have
+        //   onCommandPlay and onCommandPause instead of onCommandPlayPause?
+        this.pause();
+        
+        // TODO: Hack to kick UI for now
+        this._updateDomImpl();
     }
 }
 

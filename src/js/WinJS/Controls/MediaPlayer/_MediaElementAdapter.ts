@@ -44,13 +44,16 @@ export class MediaElementAdapter {
     nextTrack(): void {
         
     }
-
     pause(): void {
-        
+        // TODO: _mediaElement isn't required?
+        // TODO: How does _isPlayAllowed fit into this?
+        this._mediaElement && this._mediaElement.pause();
     }
 
     play(): void {
-        
+        // TODO: _mediaElement isn't required?
+        // TODO: How does _isPlayAllowed fit into this?
+        this._mediaElement && this._mediaElement.play();
     }
     
     previousTrack(): void {
