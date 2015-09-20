@@ -38,6 +38,7 @@ function _() { } // no-op
 //   - Pointer leaves MediaPlayer (instant hide?)
 //   - Pointer leaves window (instant hide?)
 //   - A light dismissable is shown (suspend auto hide timer?)
+//   - A tooltip is shown (suspend auto hide timer?)
 // TODO: How to handle touch? pointerout, pointercancel
 
 // When AutoHider is in the "shown" state, the following restart the auto hide timer:
@@ -278,6 +279,10 @@ var EventNames = {
 
 var controlsAutoHideDuration = 3000;
 
+// TODO: Bring back labels. We need them for screen readers. They are commented out
+//   because AppBarCommands don't show their tooltips when the tooltip is the same as
+//   the label. Should we remove this behavior? Is it the app's fault for making
+//   them the same?
 // TODO: Many icons aren't in Symbols.ttf and so don't work outside of Win10
 // TODO: How do reconcile initialization vs updateDom?
 //   - We want to change "hidden" property of these controls sometimes
@@ -288,7 +293,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-playfrombeginningbutton",
         options: {
             id: "win-mediaplayer-playfrombeginning",
-            label: Strings.mediaPlayerPlayFromBeginningButtonLabel,
+            //label: Strings.mediaPlayerPlayFromBeginningButtonLabel,
             section: 'primary',
             tooltip: Strings.mediaPlayerPlayFromBeginningButtonLabel,
             priority: 19,
@@ -302,7 +307,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-chapterskipbackbutton",
         options: {
             id: "win-mediaplayer-chapterskipback",
-            label: Strings.mediaPlayerChapterSkipBackButtonLabel,
+            //label: Strings.mediaPlayerChapterSkipBackButtonLabel,
             tooltip: Strings.mediaPlayerChapterSkipBackButtonLabel,
             section: 'primary',
             priority: 17,
@@ -316,7 +321,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-previoustrackbutton",
         options: {
             id: "win-mediaplayer-previoustrack",
-            label: Strings.mediaPlayerPreviousTrackButtonLabel,
+            //label: Strings.mediaPlayerPreviousTrackButtonLabel,
             tooltip: Strings.mediaPlayerPreviousTrackButtonLabel,
             section: 'primary',
             priority: 15,
@@ -330,7 +335,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-stopbutton",
         options: {
             id: "win-mediaplayer-stop",
-            label: Strings.mediaPlayerStopButtonLabel,
+            //label: Strings.mediaPlayerStopButtonLabel,
             tooltip: Strings.mediaPlayerStopButtonLabel,
             section: 'primary',
             priority: 18,
@@ -344,7 +349,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-timeskipbackbutton",
         options: {
             id: "win-mediaplayer-timeskipback",
-            label: Strings.mediaPlayerTimeSkipBackButtonLabel,
+            //label: Strings.mediaPlayerTimeSkipBackButtonLabel,
             tooltip: Strings.mediaPlayerTimeSkipBackButtonLabel,
             section: 'primary',
             priority: 11,
@@ -358,7 +363,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-rewindbutton",
         options: {
             id: "win-mediaplayer-rewind",
-            label: Strings.mediaPlayerRewindButtonLabel,
+            //label: Strings.mediaPlayerRewindButtonLabel,
             tooltip: Strings.mediaPlayerRewindButtonLabel,
             section: 'primary',
             priority: 13,
@@ -372,7 +377,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-playonremotedevicebutton",
         options: {
             id: "win-mediaplayer-playonremotedevice",
-            label: Strings.mediaPlayerCastButtonLabel,
+            //label: Strings.mediaPlayerCastButtonLabel,
             tooltip: Strings.mediaPlayerCastButtonLabel,
             section: 'primary',
             priority: 6,
@@ -385,7 +390,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-zoombutton",
         options: {
             id: "win-mediaplayer-zoom",
-            label: Strings.mediaPlayerZoomButtonLabel,
+            //label: Strings.mediaPlayerZoomButtonLabel,
             tooltip: Strings.mediaPlayerZoomButtonLabel,
             section: 'primary',
             priority: 7,
@@ -398,7 +403,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-audiotracksbutton",
         options: {
             id: "win-mediaplayer-audiotracks",
-            label: Strings.mediaPlayerAudioTracksButtonLabel,
+            //label: Strings.mediaPlayerAudioTracksButtonLabel,
             tooltip: Strings.mediaPlayerAudioTracksButtonLabel,
             priority: 8,
             section: 'primary',
@@ -412,7 +417,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-playpausebutton",
         options: {
             id: "win-mediaplayer-playpause",
-            label: Strings.mediaPlayerPlayButtonLabel,
+            //label: Strings.mediaPlayerPlayButtonLabel,
             tooltip: Strings.mediaPlayerPlayButtonLabel,
             section: 'primary',
             priority: 1,
@@ -425,7 +430,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-closedcaptionsbutton",
         options: {
             id: "win-mediaplayer-closedcaptions",
-            label: Strings.mediaPlayerClosedCaptionsButtonLabel,
+            //label: Strings.mediaPlayerClosedCaptionsButtonLabel,
             tooltip: Strings.mediaPlayerClosedCaptionsButtonLabel,
             section: 'primary',
             priority: 4,
@@ -439,7 +444,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-volumebutton",
         options: {
             id: "win-mediaplayer-volume",
-            label: Strings.mediaPlayerVolumeButtonLabel,
+            //label: Strings.mediaPlayerVolumeButtonLabel,
             section: 'primary',
             tooltip: Strings.mediaPlayerVolumeButtonLabel,
             priority: 3,
@@ -452,7 +457,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-fullscreenbutton",
         options: {
             id: "win-mediaplayer-fullscreen",
-            label: Strings.mediaPlayerFullscreenButtonLabel,
+            //label: Strings.mediaPlayerFullscreenButtonLabel,
             tooltip: Strings.mediaPlayerFullscreenButtonLabel,
             section: 'primary',
             priority: 5,
@@ -465,7 +470,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-timeskipforwardbutton",
         options: {
             id: "win-mediaplayer-timeskipforward",
-            label: Strings.mediaPlayerTimeSkipForwardButtonLabel,
+            //label: Strings.mediaPlayerTimeSkipForwardButtonLabel,
             tooltip: Strings.mediaPlayerTimeSkipForwardButtonLabel,
             section: 'primary',
             priority: 10,
@@ -479,7 +484,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-fastforwardbutton",
         options: {
             id: "win-mediaplayer-fastforward",
-            label: Strings.mediaPlayerFastForwardButtonLabel,
+            //label: Strings.mediaPlayerFastForwardButtonLabel,
             tooltip: Strings.mediaPlayerFastForwardButtonLabel,
             priority: 12,
             section: 'primary',
@@ -493,7 +498,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-playbackratebutton",
         options: {
             id: "win-mediaplayer-playbackrate",
-            label: Strings.mediaPlayerPlayRateButtonLabel,
+            //label: Strings.mediaPlayerPlayRateButtonLabel,
             tooltip: Strings.mediaPlayerPlayRateButtonLabel,
             section: 'primary',
             priority: 9,
@@ -507,7 +512,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-nexttrackbutton",
         options: {
             id: "win-mediaplayer-nexttrack",
-            label: Strings.mediaPlayerNextTrackButtonLabel,
+            //label: Strings.mediaPlayerNextTrackButtonLabel,
             tooltip: Strings.mediaPlayerNextTrackButtonLabel,
             section: 'primary',
             priority: 14,
@@ -521,7 +526,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-chapterskipforwardbutton",
         options: {
             id: "win-mediaplayer-chapterskipforward",
-            label: Strings.mediaPlayerChapterSkipForwardButtonLabel,
+            //label: Strings.mediaPlayerChapterSkipForwardButtonLabel,
             tooltip: Strings.mediaPlayerChapterSkipForwardButtonLabel,
             priority: 16,
             section: 'primary',
@@ -535,7 +540,7 @@ var fullCommandList = [
         classList: "win-mediaplayer-livebutton",
         options: {
             id: "win-mediaplayer-live",
-            label: Strings.mediaPlayerLiveButtonLabel,
+            //label: Strings.mediaPlayerLiveButtonLabel,
             tooltip: Strings.mediaPlayerLiveButtonLabel,
             section: 'primary',
             priority: 20,
