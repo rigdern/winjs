@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.  All Rights Reserved. Licensed under the MIT License. See License.txt in the project root for license information.
 /// <reference path="../../../../../typings/require.d.ts" />
 
-// import Animations = require('../../Animations');
+import Animations = require('../../Animations');
 import _Base = require('../../Core/_Base');
 import _BaseUtils = require('../../Core/_BaseUtils');
 import BindingList = require("../../BindingList");
@@ -67,9 +67,12 @@ var ClassNames = {
     
     // State
     doubleRow: "win-mediaplayer-doublerow",
+    hidden: "win-mediaplayer-hidden"
 };
 var EventNames = {
 };
+
+var controlsAutoHideDuration = 500;
 
 // TODO: Many icons aren't in Symbols.ttf and so don't work outside of Win10
 // TODO: How do reconcile initialization vs updateDom?
@@ -339,6 +342,13 @@ var fullCommandList = [
     }
 ];
 
+enum ControlsState {
+    shown,
+    showing,
+    hiding,
+    hidden
+};
+
 export class MediaPlayer {
 
     static supportedForProcessing: boolean = true;
@@ -347,12 +357,18 @@ export class MediaPlayer {
     
     private _initialized: boolean;
     private _disposed: boolean;
-    _dom: {
+    private _dom: {
         root: HTMLElement;
         content: HTMLElement;
         controls: HTMLElement;
         toolBar: _IToolBar.ToolBar;
+        transportControls: HTMLElement;
     };
+    
+    // Controls management
+    private _controlsState: ControlsState;
+    private _hideControlsTimerToken: number;
+    private _controlsAnimationPromise: Promise<any>;
 
     constructor(element?: HTMLElement, options: any = {}) {
         // Check to make sure we weren't duplicated
@@ -365,6 +381,7 @@ export class MediaPlayer {
         // Initialize private state.
         this._initialized = false;
         this._disposed = false;
+        this._controlsState = ControlsState.hidden;
 
         // Initialize public properties.
         _Control.setOptions(this, options);
@@ -443,8 +460,11 @@ export class MediaPlayer {
             root: root,
             content: contentEl,
             controls: getElement(ClassNames.controls),
-            toolBar: toolBar
+            toolBar: toolBar,
+            transportControls: getElement(ClassNames.transportControls)
         };
+        
+        _ElementUtilities._addEventListener(this._dom.root, "pointermove", this._onPointerMove.bind(this));
     }
 
     // State private to _updateDomImpl. No other method should make use of it.
@@ -453,6 +473,7 @@ export class MediaPlayer {
     // they are undefined, the first time _updateDomImpl is called, they will all be
     // rendered.
     private _updateDomImpl_rendered = {
+        controlsShown: <boolean>undefined,
         mediaElement: <HTMLMediaElement>undefined
     };
     private _updateDomImpl(): void {
@@ -475,8 +496,110 @@ export class MediaPlayer {
                 _ElementUtilities.addClass(mediaElement, ClassNames.video);
                 this._dom.controls.parentNode.insertBefore(mediaElement, this._dom.controls);
             }
+            rendered.mediaElement = mediaElement;
+        }
+        
+        var controlsShown = this._controlsState === ControlsState.hiding ||
+            this._controlsState === ControlsState.showing ||
+            this._controlsState === ControlsState.shown; 
+        if (rendered.controlsShown !== controlsShown) {
+            // During initialization (rendered.controlsShown is undefined), skip
+            // the animation
+            // TODO: Cancel current animation when starting a new animation -- don't want
+            //       promise completions running out of order
+            // TODO: Don't do animations inside of updateDom? updateDom shouldn't deal with
+            //       asynchrony to make it easier to reason about?
+            if (controlsShown) {
+                _ElementUtilities.removeClass(this._dom.controls, ClassNames.hidden);
+            } else {
+                _ElementUtilities.addClass(this._dom.controls, ClassNames.hidden);       
+            }
+            rendered.controlsShown = controlsShown;
         }
 	}
+    
+    private _prepareToAnimateControls(): void {
+        this._controlsAnimationPromise && this._controlsAnimationPromise.cancel();
+        if (this._hideControlsTimerToken) {
+            _Global.clearTimeout(this._hideControlsTimerToken);
+            this._hideControlsTimerToken = 0;
+        }
+    }
+    
+    private _playShownControlsAnimation(): void {
+        this._prepareToAnimateControls();
+        
+        this._controlsState = ControlsState.showing;
+        this._updateDomImpl();
+        
+        // TODO: Might need to start timer after animation finishes. Maybe pointermove
+        // should cache last known location of mouse.
+        // TODO: How to handle case of mouse leaving MediaPlayer?
+        // TODO: How to handle touch? pointerout, pointercancel
+        Animations.fadeIn(this._dom.controls).done(() => {
+            this._controlsState = ControlsState.shown;
+            this._updateDomImpl();
+        });
+    }
+    
+    private _playHideControlsAnimation(): void {
+        this._prepareToAnimateControls();
+        
+        this._controlsState = ControlsState.hiding;
+        this._updateDomImpl();
+        
+        Animations.fadeOut(this._dom.controls).done(() => {
+            this._controlsState = ControlsState.hidden;
+            this._updateDomImpl();
+        });
+    }
+    
+    private _onPointerMove(eventObject: PointerEvent) {
+        if (eventObject["movementX"] === 0 && eventObject["movementY"] === 0) {
+            // If the cursor hasn't moved, ignore the event. Works around a Chrome
+            // bug where a mousemove event is generated when a layout change occurs
+            // under the mouse.
+            // https://code.google.com/p/chromium/issues/detail?id=333623
+            return;
+        }
+        
+        switch (this._controlsState) {
+            case ControlsState.shown:
+                var insideTransportControls = false;
+                var element = <Node>eventObject.target;
+                while (element && element !== this._dom.root) {
+                    if (element === this._dom.transportControls) {
+                        insideTransportControls = true;
+                        break;
+                    }
+                    element = element.parentNode;
+                }
+                
+                if (insideTransportControls && this._hideControlsTimerToken) {
+                    _Global.clearTimeout(this._hideControlsTimerToken);
+                    this._hideControlsTimerToken = 0;
+                } else if (!insideTransportControls) {
+                    if (this._hideControlsTimerToken) {
+                        _Global.clearTimeout(this._hideControlsTimerToken);
+                        this._hideControlsTimerToken = 0;
+                    }
+                    this._hideControlsTimerToken = _Global.setTimeout(() => {
+                            this._hideControlsTimerToken = 0;
+                            this._playHideControlsAnimation();
+                        },
+                        controlsAutoHideDuration
+                    );
+                }
+                break;
+            case ControlsState.showing:
+                // No-op
+                break;
+            case ControlsState.hiding:
+            case ControlsState.hidden:
+                this._playShownControlsAnimation();
+            break;
+        }
+    }
 }
 
 _Base.Class.mix(MediaPlayer, _Events.createEventProperties(
