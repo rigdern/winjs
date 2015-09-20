@@ -14,6 +14,8 @@ import _Events = require('../../Core/_Events');
 import _Global = require('../../Core/_Global');
 import _Hoverable = require('../../Utilities/_Hoverable');
 import _MediaElementAdapter = require('./_MediaElementAdapter');
+import _Menu = require("../Menu");
+import _MenuCommand = require("../Menu/_Command");
 import Promise = require('../../Promise');
 import _Resources = require("../../Core/_Resources");
 import ToolBar = require("../ToolBar");
@@ -29,6 +31,84 @@ require(["require-style!less/colors-mediaplayer"]);
 _Hoverable.isHoverable;
 
 function _() { } // no-op
+
+function deparent(element: HTMLElement) {
+    var parent = element.parentNode;
+    parent && parent.removeChild(element);
+}
+
+//
+// RadioButtonMenu
+//
+
+interface IRadioButtonMenuArgs {
+    onSelected: (id: any) => void
+}
+
+class RadioButtonMenu {
+    private _args: IRadioButtonMenuArgs;
+    private _menu: _Menu.Menu;
+    
+    constructor(args: IRadioButtonMenuArgs) {
+        this._args = args;
+        this._menu = new _Menu.Menu();
+    }
+    
+    get menu(): _Menu.Menu {
+        return this._menu;
+    }
+    
+    private _options: { id: any; label: string }[];
+    get options() {
+        return this._options;
+    }
+    set options(value: { id: any; label: string }[]) {
+        this._options = value.slice(0);
+        this._updateDom();
+    }
+    
+    private _selectedId: any;
+    get selectedId() {
+        return this._selectedId;
+    }
+    set selectedId(value: any) {
+        this._selectedId = value;
+        this._updateDom();
+    }
+    
+    private _updateDom_rendered = {
+        options: <any[]>[],        
+        optionControls: <_MenuCommand.MenuCommand[]>[]
+    };
+    private _updateDom() {
+        var rendered = this._updateDom_rendered;
+        
+        var controls = rendered.optionControls;
+        var nextControls: _MenuCommand.MenuCommand[] = [];
+        this.options.forEach((opt) => {
+            var command = controls.shift() || new _MenuCommand.MenuCommand(null, { type: "toggle" });
+            command.label = opt.label;
+            command.selected = (opt.id === this.selectedId);
+            command.onclick = this._onClick.bind(this, opt.id);
+            if (!command.element.parentNode) {
+                this._menu.element.appendChild(command.element);
+            }
+            nextControls.push(command);
+        });
+        
+        controls.forEach((command) => {
+            var element = command.element;
+            element.parentElement && element.parentNode.removeChild(element);
+        });
+        
+        rendered.optionControls = nextControls;
+    }
+    
+    private _onClick(id: any, eventObject: MouseEvent) {
+        this.selectedId = id;
+        this._args.onSelected(id);
+    }
+}
 
 //
 // AutoHider
@@ -240,6 +320,10 @@ class MediaElementAdapterWrapper {
         this._mediaElementAdapter = mediaElementAdapter;
     }
     
+    get mediaElement(): HTMLMediaElement {
+        return this._mediaElementAdapter && this._mediaElementAdapter.mediaElement;
+    }
+    
     get paused(): boolean {
         // TODO: What should happen if there's no mediaElement? Is that a real scenario?
         //   Probably caller of this API needs to be aware of this case and handle it
@@ -366,6 +450,7 @@ export class MediaPlayer {
             volume: _Command.AppBarCommand;
             zoom: _Command.AppBarCommand;
         };
+        closedCaptionsMenu: RadioButtonMenu;
         content: HTMLElement;
         controls: HTMLElement;
         root: HTMLElement;
@@ -477,6 +562,9 @@ export class MediaPlayer {
             return;
         }
         this._disposed = true;
+        this._dom.toolBar.dispose();
+        this._dom.closedCaptionsMenu.menu.dispose();
+        deparent(this._dom.closedCaptionsMenu.menu.element);
         this._autoHider.dispose();
     }
     
@@ -550,8 +638,8 @@ export class MediaPlayer {
                     section: 'primary',
                     priority: 4,
                     icon: "\uE7F0",
-                    hidden: true,
-                    //onclick: this._onClosedCaptionsCommandInvoked.bind(this)
+                    // hidden: true, TODO: make it hidden by default again
+                    onclick: this._onCommandClosedCaptions.bind(this)
                 }
             },
             fastForward: {
@@ -847,7 +935,27 @@ export class MediaPlayer {
             closedDisplayMode: ToolBar.ToolBar.ClosedDisplayMode.full
         });
         
+        // TODO: Lazily create menu?
+        var closedCaptionsMenu = new RadioButtonMenu({
+            onSelected: (selectedId: any) => {
+                // TODO: updateDom should take care of this?
+                var mediaElement = this._mediaElementAdapter.mediaElement;
+                if (mediaElement) {
+                    var textTracks = mediaElement.textTracks;
+                    for (var i = 0; i < textTracks.length; i++) {
+                        var track = textTracks[i];
+                        var id = track.language;
+                        if (track.kind === "captions" || track.kind === "subtitles") {
+                            track.mode = id === selectedId ? "showing" : "hidden";
+                        }
+                    }
+                }
+            }
+        });
+        document.body.appendChild(closedCaptionsMenu.menu.element);
+        
         this._dom = {
+            closedCaptionsMenu: closedCaptionsMenu,
             commands: commands,
             content: contentEl,
             controls: getElement(ClassNames.controls),
@@ -986,6 +1094,34 @@ export class MediaPlayer {
         
         // TODO: Hack to kick UI for now
         this._updateDomImpl();
+    }
+    
+    private _onCommandClosedCaptions(eventObject: MouseEvent) {
+        // TODO: Should we be using the DOM as the source of truth
+        //  for closed captions state?
+        // TODO: Don't repeat this logic here and in onSelected?
+        var captions: { id: any; label: string }[] = [];
+        var selectedId: any = null;
+        var mediaElement = this._mediaElementAdapter.mediaElement;
+        if (mediaElement) {
+            var textTracks = mediaElement.textTracks;
+            for (var i = 0; i < textTracks.length; i++) {
+                var track = textTracks[i];
+                var id = track.language;
+                if (track.kind === "captions" || track.kind === "subtitles") {
+                    captions.push({ id: id, label: track.label });
+                    if (track.mode === "showing") {
+                        selectedId = id;
+                    }
+                }
+            }
+        }
+        captions.push({ id: null, label: "Off" });
+        
+        var menu = this._dom.closedCaptionsMenu;
+        menu.options = captions;
+        menu.selectedId = selectedId;
+        menu.menu.show(<HTMLElement>eventObject.currentTarget, undefined, undefined);
     }
 }
 
