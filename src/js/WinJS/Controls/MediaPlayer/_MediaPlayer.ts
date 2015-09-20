@@ -48,64 +48,51 @@ interface IRadioButtonMenuArgs {
 class RadioButtonMenu {
     private _args: IRadioButtonMenuArgs;
     private _menu: _Menu.Menu;
+    private _commands: _MenuCommand.MenuCommand[];
+    private _options: { id: any; label: string }[];
     
     constructor(args: IRadioButtonMenuArgs) {
         this._args = args;
         this._menu = new _Menu.Menu();
+        this._commands = [];
+        this._options = [];
     }
     
     get menu(): _Menu.Menu {
         return this._menu;
     }
     
-    private _options: { id: any; label: string }[];
-    get options() {
-        return this._options;
-    }
-    set options(value: { id: any; label: string }[]) {
-        this._options = value.slice(0);
-        this._updateDom();
-    }
-    
-    private _selectedId: any;
-    get selectedId() {
-        return this._selectedId;
-    }
-    set selectedId(value: any) {
-        this._selectedId = value;
-        this._updateDom();
-    }
-    
-    private _updateDom_rendered = {
-        options: <any[]>[],        
-        optionControls: <_MenuCommand.MenuCommand[]>[]
-    };
-    private _updateDom() {
-        var rendered = this._updateDom_rendered;
-        
-        var controls = rendered.optionControls;
-        var nextControls: _MenuCommand.MenuCommand[] = [];
-        this.options.forEach((opt) => {
-            var command = controls.shift() || new _MenuCommand.MenuCommand(null, { type: "toggle" });
+    update(state: {
+        selectedId: any;
+        options: { id: any; label: string }[];
+    }) {
+        var commands = this._commands;
+        var nextCommands: _MenuCommand.MenuCommand[] = [];
+        state.options.forEach((opt) => {
+            var command = commands.shift() || new _MenuCommand.MenuCommand(null, { type: "toggle" });
             command.label = opt.label;
-            command.selected = (opt.id === this.selectedId);
+            command.selected = (opt.id === state.selectedId);
             command.onclick = this._onClick.bind(this, opt.id);
             if (!command.element.parentNode) {
                 this._menu.element.appendChild(command.element);
             }
-            nextControls.push(command);
+            nextCommands.push(command);
         });
         
-        controls.forEach((command) => {
+        commands.forEach((command) => {
             var element = command.element;
             element.parentElement && element.parentNode.removeChild(element);
         });
         
-        rendered.optionControls = nextControls;
+        this._commands = nextCommands;
+        this._options = state.options;
     }
     
     private _onClick(id: any, eventObject: MouseEvent) {
-        this.selectedId = id;
+        this.update({
+            selectedId: id,
+            options: this._options
+        });
         this._args.onSelected(id);
     }
 }
@@ -1119,8 +1106,10 @@ export class MediaPlayer {
         captions.push({ id: null, label: "Off" });
         
         var menu = this._dom.closedCaptionsMenu;
-        menu.options = captions;
-        menu.selectedId = selectedId;
+        menu.update({
+            selectedId: selectedId,
+            options: captions
+        });
         menu.menu.show(<HTMLElement>eventObject.currentTarget, undefined, undefined);
     }
 }
