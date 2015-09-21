@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.  All Rights Reserved. Licensed under the MIT License. See License.txt in the project root for license information.
 /// <reference path="../../../../../typings/require.d.ts" />
 
+import _Accents = require('../../_Accents');
 import Animations = require('../../Animations');
 import _Base = require('../../Core/_Base');
 import _BaseUtils = require('../../Core/_BaseUtils');
@@ -29,6 +30,19 @@ require(["require-style!less/colors-mediaplayer"]);
 
 // Force-load Dependencies
 _Hoverable.isHoverable;
+
+_Accents.createAccentRule(
+    ".win-mediaplayer-seekprogress," +
+    ".win-mediaplayer-scrubbing .win-mediaplayer-seek-mark", [
+        { name: "background-color", value: _Accents.ColorTypes.accent }
+    ]
+);
+_Accents.createAccentRule(
+    ".win-mediaplayer-seek-mark," +
+    "html.win-hoverable .win-mediaplayer-scrubbing .win-mediaplayer-seek-mark:hover", [
+        { name: "border-color", value: _Accents.ColorTypes.accent }
+    ]
+);
 
 function _() { } // no-op
 
@@ -336,6 +350,14 @@ class MediaElementAdapterWrapper {
 // MediaPlayer
 //
 
+// TODO: Media Stream API? Original implementation listened to "addtrack" event which
+//   appears to be a Media Stream event. So is MediaPlayer designed to support using
+//   Media Streams with the media element?
+
+// TODO: Where to check if there are subtitles/captions? Wait for loadedmetadata event?
+//   If metadata was already loaded, event won't fire so we'd have to also check it in
+//   that case.
+
 // TODO: Missing strings for:
 //   - Pause tooltip/label
 //   - Exit full screet tooltip/label
@@ -372,6 +394,11 @@ var ClassNames = {
     container: "win-mediaplayer-container",
     controls: "win-mediaplayer-controls",
     mediaPlayer: "win-mediaplayer",
+    progressContainer: "win-mediaplayer-progresscontainer",
+    seekBar: "win-mediaplayer-seekbar",
+    seekBarVisualElementsContainer: "win-mediaplayer-seekbarvisualelements-container",
+    seekMark: "win-mediaplayer-seek-mark",
+    seekProgress: "win-mediaplayer-seekprogress",
     timeline: "win-mediaplayer-timeline",
     toolBar: "win-mediaplayer-toolbar",
     transportControls: "win-mediaplayer-transportcontrols",
@@ -441,9 +468,16 @@ export class MediaPlayer {
         content: HTMLElement;
         controls: HTMLElement;
         root: HTMLElement;
+        seekBar: HTMLElement;
+        seekBarVisualElementsContainer: HTMLElement;
+        seekProgress: HTMLElement;
         toolBar: _IToolBar.ToolBar;
         transportControls: HTMLElement;
     };
+    private _sizes: {
+        seekBarTotalWidth: number;
+    };
+    private _progress: number;
     
     // Controls management
     private _commandDescriptions: {
@@ -488,6 +522,8 @@ export class MediaPlayer {
         // Initialize private state.
         this._initialized = false;
         this._disposed = false;
+        this._sizes = null;
+        this._progress = 0.50;
         this._controlsState = ControlsState.hidden;
         this._autoHider = new AutoHider({
             element: this._dom.root,
@@ -831,6 +867,14 @@ export class MediaPlayer {
                 '<div class="' + ClassNames.controls + '">' +
                     '<div class="' + ClassNames.transportControls + '">' +
                         '<div class="' + ClassNames.timeline + '" tabIndex="0">' +
+                            '<div class="' + ClassNames.progressContainer + '">' +
+                                '<div class="' + ClassNames.seekBar + '">' +
+                                    '<div class="' + ClassNames.seekProgress + '"></div>' +
+                                    '<div class="' + ClassNames.seekBarVisualElementsContainer + '">' +
+                                        '<div class="' + ClassNames.seekMark + '"></div>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
                         '</div>' +
                         '<div class="' + ClassNames.toolBar + ' ' + ClassNames.commands + '"></div>' +
                     '</div>' +
@@ -947,6 +991,9 @@ export class MediaPlayer {
             content: contentEl,
             controls: getElement(ClassNames.controls),
             root: root,
+            seekBar: getElement(ClassNames.seekBar),
+            seekBarVisualElementsContainer: getElement(ClassNames.seekBarVisualElementsContainer),
+            seekProgress: getElement(ClassNames.seekProgress),
             toolBar: toolBar,
             transportControls: getElement(ClassNames.transportControls)
         };
@@ -960,7 +1007,8 @@ export class MediaPlayer {
     private _updateDomImpl_rendered = {
         controlsShown: <boolean>undefined,
         mediaElement: <HTMLMediaElement>undefined,
-        playPauseButtonIsPlay: <boolean>undefined
+        playPauseButtonIsPlay: <boolean>undefined,
+        seekBarX: <number>undefined
     };
     private _updateDomImpl(): void {
         if (!this._initialized) {
@@ -968,6 +1016,31 @@ export class MediaPlayer {
         }
         
         var rendered = this._updateDomImpl_rendered;
+        
+        var controlsShown = this._controlsState === ControlsState.hiding ||
+            this._controlsState === ControlsState.showing ||
+            this._controlsState === ControlsState.shown; 
+        if (rendered.controlsShown !== controlsShown) {
+            // During initialization (rendered.controlsShown is undefined), skip
+            // the animation
+            // TODO: Cancel current animation when starting a new animation -- don't want
+            //       promise completions running out of order
+            // TODO: Don't do animations inside of updateDom? updateDom shouldn't deal with
+            //       asynchrony to make it easier to reason about?
+            if (controlsShown) {
+                _ElementUtilities.removeClass(this._dom.controls, ClassNames.hidden);
+                if (!this._sizes) {
+                    // TODO: Remeasure on window resize
+                    // TODO: The forceLayout API should also remeasure seekBarTotalWidth
+                    this._sizes = {
+                        seekBarTotalWidth: _ElementUtilities.getTotalWidth(this._dom.seekBar)
+                    };
+                }
+            } else {
+                _ElementUtilities.addClass(this._dom.controls, ClassNames.hidden);       
+            }
+            rendered.controlsShown = controlsShown;
+        }
         
         // TODO: Can this.mediaElementAdapter be null? Do consumers ever set it to null?
         var mediaElement = this.mediaElementAdapter.mediaElement;
@@ -1009,22 +1082,11 @@ export class MediaPlayer {
             }
         }
         
-        var controlsShown = this._controlsState === ControlsState.hiding ||
-            this._controlsState === ControlsState.showing ||
-            this._controlsState === ControlsState.shown; 
-        if (rendered.controlsShown !== controlsShown) {
-            // During initialization (rendered.controlsShown is undefined), skip
-            // the animation
-            // TODO: Cancel current animation when starting a new animation -- don't want
-            //       promise completions running out of order
-            // TODO: Don't do animations inside of updateDom? updateDom shouldn't deal with
-            //       asynchrony to make it easier to reason about?
-            if (controlsShown) {
-                _ElementUtilities.removeClass(this._dom.controls, ClassNames.hidden);
-            } else {
-                _ElementUtilities.addClass(this._dom.controls, ClassNames.hidden);       
-            }
-            rendered.controlsShown = controlsShown;
+        var seekBarX = this._progress * this._sizes.seekBarTotalWidth;
+        if (rendered.seekBarX !== seekBarX) {
+            this._dom.seekProgress.style[transformNames.scriptName] = "scaleX(" + this._progress + ")";
+            this._dom.seekBarVisualElementsContainer.style[transformNames.scriptName] = "translateX(" + seekBarX + "px)";
+            rendered.seekBarX = seekBarX;
         }
 	}
     
