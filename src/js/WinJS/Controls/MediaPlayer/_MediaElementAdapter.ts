@@ -61,7 +61,9 @@ export class MediaElementAdapter {
     }
     
     seek(newTime: number): void {
-        
+        if (this._mediaElement) {
+            this._mediaElement.currentTime = newTime;
+        }
     }
     
     stop(): void {

@@ -337,6 +337,10 @@ class MediaElementAdapterWrapper {
         return mediaElement ? mediaElement.paused : true;
     }
     
+    seek(newTime: number): void {
+        this._mediaElementAdapter && this._mediaElementAdapter.seek(newTime);
+    }
+    
     pause(): void {
         // TODO: _mediaElement isn't required?
         // TODO: How does _isPlayAllowed fit into this?
@@ -580,6 +584,10 @@ export class MediaPlayer {
     set mediaElementAdapter(value: _MediaElementAdapter.MediaElementAdapter) {
         this._nakedMediaElementAdapter = value;
         this._mediaElementAdapter = new MediaElementAdapterWrapper(value);
+    }
+    
+    seek(time: number): void {
+        this._mediaElementAdapter.seek(time);
     }
     
     pause(): void {
@@ -1175,6 +1183,7 @@ export class MediaPlayer {
         var eventObject = wrappedEventObject.detail.originalEvent;
         if (eventObject.pointerId === this._seekPointerId) {
             this._resetSeekPointerState();
+            this.seek(this._percentToTime(this._progress));
         }
     }
     
@@ -1182,7 +1191,13 @@ export class MediaPlayer {
         var eventObject = wrappedEventObject.detail.originalEvent;
         if (eventObject.pointerId === this._seekPointerId) {
             this._resetSeekPointerState();
+            this.seek(this._percentToTime(this._progress));
         }
+    }
+    
+    private _percentToTime(percent: number): number {
+        // TODO: What about startTime and endTime?
+        return percent * this._mediaElementAdapter.mediaElement.duration;
     }
     
     private _seekPointerEventToPercent(eventObject: PointerEvent) {
