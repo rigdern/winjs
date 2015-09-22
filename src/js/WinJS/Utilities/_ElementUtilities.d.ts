@@ -1008,6 +1008,17 @@ export interface IMutationRecordShim {
     attributeName: string;
 }
 
+export interface IGenericListenerEvent<T> {
+    detail: {
+        originalEvent: T;
+    };
+}
+
+export interface IGenericListener {
+    addEventListener<T>(element: HTMLElement, event: string, handler: (ev: IGenericListenerEvent<T>) => any, capture?: boolean): void;
+    removeEventListener<T>(element: HTMLElement, event: string, handler: (ev: IGenericListenerEvent<T>) => any, capture?: boolean): void;
+}
+
 //#endregion Interfaces
 
 export declare function _getPositionRelativeTo(element: HTMLElement, ancestor: HTMLElement): IPosition;
@@ -1017,11 +1028,6 @@ export declare function _uniqueID(e: HTMLElement): string;
 export declare module _resizeNotifier {
     export function subscribe(element: HTMLElement, handler: (ev: any) => any): void;
     export function unsubscribe(element: HTMLElement, handler: (ev: any) => any): void;
-}
-
-export declare module _inputPaneListener {
-    export function addEventListener(element: HTMLElement, event: string, handler: (ev: any) => any): void;
-    export function removeEventListener(element: HTMLElement, event: string, handler: (ev: any) => any): void;
 }
 
 export declare function _getHighAndLowTabIndices(element: HTMLElement): { highest: number; lowest: number };
@@ -1060,6 +1066,8 @@ export declare var _MutationObserver: {
     prototype: IMutationObserverShim;
     new (callback: (mutations: IMutationRecordShim[]) => void): IMutationObserverShim;
 };
+export declare var _globalListener: IGenericListener;
+export declare var _inputPaneListener: IGenericListener;
 export declare var _supportsSnapPoints: boolean;
 export declare var _supportsTouchDetection: boolean;
 

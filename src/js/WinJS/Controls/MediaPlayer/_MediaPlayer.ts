@@ -51,6 +51,10 @@ function deparent(element: HTMLElement) {
     parent && parent.removeChild(element);
 }
 
+function clamp(lowerBound: number, upperBound: number, x: number) {
+    return Math.max(lowerBound, Math.min(upperBound, x));
+}
+
 //
 // RadioButtonMenu
 //
@@ -406,7 +410,8 @@ var ClassNames = {
     
     // State
     doubleRow: "win-mediaplayer-doublerow",
-    hidden: "win-mediaplayer-hidden"
+    hidden: "win-mediaplayer-hidden",
+    scrubbing: "win-mediaplayer-scrubbing"
 };
 var EventNames = {
 };
@@ -467,6 +472,7 @@ export class MediaPlayer {
         closedCaptionsMenu: RadioButtonMenu;
         content: HTMLElement;
         controls: HTMLElement;
+        progressContainer: HTMLElement;
         root: HTMLElement;
         seekBar: HTMLElement;
         seekBarVisualElementsContainer: HTMLElement;
@@ -477,6 +483,9 @@ export class MediaPlayer {
     private _sizes: {
         seekBarTotalWidth: number;
     };
+    private _seekPointerId: number;
+    private _registeredSeekPointerEvents: boolean;
+    private _scrubbing: boolean;
     private _progress: number;
     
     // Controls management
@@ -523,6 +532,7 @@ export class MediaPlayer {
         this._initialized = false;
         this._disposed = false;
         this._sizes = null;
+        this._scrubbing = false;
         this._progress = 0.50;
         this._controlsState = ControlsState.hidden;
         this._autoHider = new AutoHider({
@@ -990,6 +1000,7 @@ export class MediaPlayer {
             commands: commands,
             content: contentEl,
             controls: getElement(ClassNames.controls),
+            progressContainer: getElement(ClassNames.progressContainer),
             root: root,
             seekBar: getElement(ClassNames.seekBar),
             seekBarVisualElementsContainer: getElement(ClassNames.seekBarVisualElementsContainer),
@@ -997,6 +1008,12 @@ export class MediaPlayer {
             toolBar: toolBar,
             transportControls: getElement(ClassNames.transportControls)
         };
+        
+        this._onSeekPointerMove = this._onSeekPointerMove.bind(this);
+        this._onSeekPointerUp = this._onSeekPointerUp.bind(this);
+        this._onSeekPointerCancel = this._onSeekPointerCancel.bind(this);
+        
+        _ElementUtilities._addEventListener(this._dom.progressContainer, "pointerdown", this._onSeekPointerDown.bind(this));
     }
 
     // State private to _updateDomImpl. No other method should make use of it.
@@ -1008,6 +1025,7 @@ export class MediaPlayer {
         controlsShown: <boolean>undefined,
         mediaElement: <HTMLMediaElement>undefined,
         playPauseButtonIsPlay: <boolean>undefined,
+        scrubbing: <boolean>undefined,
         seekBarX: <number>undefined
     };
     private _updateDomImpl(): void {
@@ -1084,9 +1102,18 @@ export class MediaPlayer {
         
         var seekBarX = this._progress * this._sizes.seekBarTotalWidth;
         if (rendered.seekBarX !== seekBarX) {
+            // TODO: Seek head hangs off of right side of seek track when it reaches end of video
             this._dom.seekProgress.style[transformNames.scriptName] = "scaleX(" + this._progress + ")";
             this._dom.seekBarVisualElementsContainer.style[transformNames.scriptName] = "translateX(" + seekBarX + "px)";
             rendered.seekBarX = seekBarX;
+        }
+        
+        if (rendered.scrubbing !== this._scrubbing) {
+            if (this._scrubbing) {
+                _ElementUtilities.addClass(this._dom.root, ClassNames.scrubbing);
+            } else {
+                _ElementUtilities.removeClass(this._dom.root, ClassNames.scrubbing);
+            }
         }
 	}
     
@@ -1118,6 +1145,64 @@ export class MediaPlayer {
             this._updateDomImpl();
             this._autoHider.hidden();
         });
+    }
+    
+    // TODO: Pull all of these seekbar stuff into its own component?
+    
+    private _onSeekPointerDown(eventObject: PointerEvent) {
+        this._seekPointerId = eventObject.pointerId;
+        this._scrubbing = true;
+        this._progress = this._seekPointerEventToPercent(eventObject);
+        if (!this._registeredSeekPointerEvents) {
+            _ElementUtilities._globalListener.addEventListener(this._dom.root, "pointermove", this._onSeekPointerMove);
+            _ElementUtilities._globalListener.addEventListener(this._dom.root, "pointerup", this._onSeekPointerUp);
+            _ElementUtilities._globalListener.addEventListener(this._dom.root, "pointercancel", this._onSeekPointerCancel);
+            this._registeredSeekPointerEvents = true;
+        }
+        this._updateDomImpl();
+    }
+    
+    private _onSeekPointerMove(wrappedEventObject: _ElementUtilities.IGenericListenerEvent<PointerEvent>) {
+        var eventObject = wrappedEventObject.detail.originalEvent;
+        if (eventObject.pointerId === this._seekPointerId) {
+            eventObject.preventDefault(); // Prevent text selection
+            this._progress = this._seekPointerEventToPercent(eventObject);
+            this._updateDomImpl();
+        }
+    }
+    
+    private _onSeekPointerUp(wrappedEventObject: _ElementUtilities.IGenericListenerEvent<PointerEvent>) {
+        var eventObject = wrappedEventObject.detail.originalEvent;
+        if (eventObject.pointerId === this._seekPointerId) {
+            this._resetSeekPointerState();
+        }
+    }
+    
+    private _onSeekPointerCancel(wrappedEventObject: _ElementUtilities.IGenericListenerEvent<PointerEvent>) {
+        var eventObject = wrappedEventObject.detail.originalEvent;
+        if (eventObject.pointerId === this._seekPointerId) {
+            this._resetSeekPointerState();
+        }
+    }
+    
+    private _seekPointerEventToPercent(eventObject: PointerEvent) {
+        // TODO: What are the correct x/y properties to use off of eventObject?
+        // TODO: Shouldn't call getBoundingClientRect so frequently -- expensive
+        // TODO: rtl
+        var x = eventObject.clientX - this._dom.seekBar.getBoundingClientRect().left;
+        return clamp(0, 1, x / this._sizes.seekBarTotalWidth);
+    }
+    
+    private _resetSeekPointerState() {
+        if (this._registeredSeekPointerEvents) {
+            _ElementUtilities._globalListener.removeEventListener(this._dom.root, "pointermove", this._onSeekPointerMove);
+            _ElementUtilities._globalListener.removeEventListener(this._dom.root, "pointerup", this._onSeekPointerUp);
+            _ElementUtilities._globalListener.removeEventListener(this._dom.root, "pointercancel", this._onSeekPointerCancel);
+            this._registeredSeekPointerEvents = false;
+        }
+        this._seekPointerId = null;
+        this._scrubbing = false;
+        this._updateDomImpl();
     }
     
     // Click handlers for commands
