@@ -489,7 +489,16 @@ export class MediaPlayer {
     };
     private _seekPointerId: number;
     private _registeredSeekPointerEvents: boolean;
-    private _scrubbing: boolean;
+    private _scrubbing: {
+        progress: number;
+    };
+    // TODO: Combine currentTime and progress.
+    private _currentTime: {
+        value: number;
+        // If the media element gave us this value, there's no reason to give this
+        // value back to the media element in updateDom.
+        cameFromMediaElement: boolean;
+    };
     private _progress: number;
     
     // Controls management
@@ -536,7 +545,11 @@ export class MediaPlayer {
         this._initialized = false;
         this._disposed = false;
         this._sizes = null;
-        this._scrubbing = false;
+        this._currentTime = {
+            value: 0, // TODO: grab this info from media element when metadata is available
+            cameFromMediaElement: false
+        };
+        this._scrubbing = null;
         this._progress = 0.50;
         this._controlsState = ControlsState.hidden;
         this._autoHider = new AutoHider({
@@ -587,7 +600,9 @@ export class MediaPlayer {
     }
     
     seek(time: number): void {
-        this._mediaElementAdapter.seek(time);
+        this._currentTime.value = time;
+        this._currentTime.cameFromMediaElement = false;
+        this._updateDomImpl();
     }
     
     pause(): void {
@@ -1033,8 +1048,9 @@ export class MediaPlayer {
         controlsShown: <boolean>undefined,
         mediaElement: <HTMLMediaElement>undefined,
         playPauseButtonIsPlay: <boolean>undefined,
-        scrubbing: <boolean>undefined,
-        seekBarX: <number>undefined
+        isScrubbing: <boolean>undefined,
+        seekBarX: <number>undefined,
+        currentTime: <number>undefined
     };
     private _updateDomImpl(): void {
         if (!this._initialized) {
@@ -1108,20 +1124,31 @@ export class MediaPlayer {
             }
         }
         
-        var seekBarX = this._progress * this._sizes.seekBarTotalWidth;
+        var isScrubbing = !!this._scrubbing;
+        
+        var progress = isScrubbing ? this._scrubbing.progress : this._progress;
+        var seekBarX = progress * this._sizes.seekBarTotalWidth;
         if (rendered.seekBarX !== seekBarX) {
             // TODO: Seek head hangs off of right side of seek track when it reaches end of video
-            this._dom.seekProgress.style[transformNames.scriptName] = "scaleX(" + this._progress + ")";
+            this._dom.seekProgress.style[transformNames.scriptName] = "scaleX(" + progress + ")";
             this._dom.seekBarVisualElementsContainer.style[transformNames.scriptName] = "translateX(" + seekBarX + "px)";
             rendered.seekBarX = seekBarX;
         }
         
-        if (rendered.scrubbing !== this._scrubbing) {
-            if (this._scrubbing) {
+        if (rendered.currentTime !== this._currentTime.value) {
+            if (!this._currentTime.cameFromMediaElement) {
+                this.mediaElementAdapter.seek(this._currentTime.value);
+            }
+            rendered.currentTime = this._currentTime.value;
+        }
+        
+        if (rendered.isScrubbing !== isScrubbing) {
+            if (isScrubbing) {
                 _ElementUtilities.addClass(this._dom.root, ClassNames.scrubbing);
             } else {
                 _ElementUtilities.removeClass(this._dom.root, ClassNames.scrubbing);
             }
+            rendered.isScrubbing = isScrubbing;
         }
 	}
     
@@ -1159,8 +1186,9 @@ export class MediaPlayer {
     
     private _onSeekPointerDown(eventObject: PointerEvent) {
         this._seekPointerId = eventObject.pointerId;
-        this._scrubbing = true;
-        this._progress = this._seekPointerEventToPercent(eventObject);
+        this._scrubbing = {
+            progress: this._seekPointerEventToPercent(eventObject)
+        };
         if (!this._registeredSeekPointerEvents) {
             _ElementUtilities._globalListener.addEventListener(this._dom.root, "pointermove", this._onSeekPointerMove);
             _ElementUtilities._globalListener.addEventListener(this._dom.root, "pointerup", this._onSeekPointerUp);
@@ -1174,7 +1202,7 @@ export class MediaPlayer {
         var eventObject = wrappedEventObject.detail.originalEvent;
         if (eventObject.pointerId === this._seekPointerId) {
             eventObject.preventDefault(); // Prevent text selection
-            this._progress = this._seekPointerEventToPercent(eventObject);
+            this._scrubbing.progress = this._seekPointerEventToPercent(eventObject);
             this._updateDomImpl();
         }
     }
@@ -1182,16 +1210,22 @@ export class MediaPlayer {
     private _onSeekPointerUp(wrappedEventObject: _ElementUtilities.IGenericListenerEvent<PointerEvent>) {
         var eventObject = wrappedEventObject.detail.originalEvent;
         if (eventObject.pointerId === this._seekPointerId) {
+            this._progress = this._scrubbing.progress;
+            this._currentTime.value = this._percentToTime(this._progress);
+            this._currentTime.cameFromMediaElement = false;
             this._resetSeekPointerState();
-            this.seek(this._percentToTime(this._progress));
+            this._updateDomImpl();
         }
     }
     
     private _onSeekPointerCancel(wrappedEventObject: _ElementUtilities.IGenericListenerEvent<PointerEvent>) {
         var eventObject = wrappedEventObject.detail.originalEvent;
         if (eventObject.pointerId === this._seekPointerId) {
+            this._progress = this._scrubbing.progress;
+            this._currentTime.value = this._percentToTime(this._progress);
+            this._currentTime.cameFromMediaElement = false;
             this._resetSeekPointerState();
-            this.seek(this._percentToTime(this._progress));
+            this._updateDomImpl();
         }
     }
     
@@ -1216,7 +1250,7 @@ export class MediaPlayer {
             this._registeredSeekPointerEvents = false;
         }
         this._seekPointerId = null;
-        this._scrubbing = false;
+        this._scrubbing = null;
         this._updateDomImpl();
     }
     
