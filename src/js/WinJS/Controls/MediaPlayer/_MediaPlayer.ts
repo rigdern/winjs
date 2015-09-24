@@ -412,6 +412,12 @@ var ClassNames = {
     transportControls: "win-mediaplayer-transportcontrols",
     video: "win-mediaplayer-video",
     
+    // Thumbnail elements
+    playbackSpeedIndicator: "win-mediaplayer-playbackspeedindicator",    
+    seekTimeIndicator: "win-mediaplayer-seektimeindicator",
+    thumbnail: "win-mediaplayer-thumbnail",
+    thumbnailVisual: "win-mediaplayer-thumbnailvisual",
+        
     // State
     doubleRow: "win-mediaplayer-doublerow",
     hidden: "win-mediaplayer-hidden",
@@ -482,6 +488,12 @@ export class MediaPlayer {
         seekBarVisualElementsContainer: HTMLElement;
         seekProgress: HTMLElement;
         toolBar: _IToolBar.ToolBar;
+        thumbnail: {
+            playbackSpeedIndicator: HTMLElement;
+            root: HTMLElement;
+            seekTimeIndicator: HTMLElement;
+            thumbnailVisual: HTMLElement;
+        };
         transportControls: HTMLElement;
     };
     private _sizes: {
@@ -492,6 +504,7 @@ export class MediaPlayer {
     private _scrubbing: {
         progress: number;
     };
+    private _playbackSpeed: number;
     // TODO: Combine currentTime and progress.
     private _currentTime: {
         value: number;
@@ -549,6 +562,7 @@ export class MediaPlayer {
             value: 0, // TODO: grab this info from media element when metadata is available
             cameFromMediaElement: false
         };
+        this._playbackSpeed = 0;
         this._scrubbing = null;
         this._progress = 0.50;
         this._controlsState = ControlsState.hidden;
@@ -611,6 +625,11 @@ export class MediaPlayer {
     
     play(): void {
         this._mediaElementAdapter.play();
+    }
+    
+    private _debugControls(): void {
+        this._autoHider.dispose();
+        this._playShowControlsAnimation();
     }
 
     dispose(): void {
@@ -707,8 +726,8 @@ export class MediaPlayer {
                     priority: 12,
                     section: 'primary',
                     icon: "next",
-                    hidden: true,
-                    //onclick: this._onFastForwardCommandInvoked.bind(this)
+                    //hidden: true, TODO: make it hidden by default again
+                    onclick: this._onCommandFastForward.bind(this)
                 }
             },
             goToLive: {
@@ -797,8 +816,8 @@ export class MediaPlayer {
                     section: 'primary',
                     priority: 13,
                     icon: "previous",
-                    hidden: true,
-                    //onclick: this._onRewindCommandInvoked.bind(this)
+                    //hidden: true, TODO: make it hidden by default again
+                    onclick: this._onCommandRewind.bind(this)
                 }
             },
             stop: {
@@ -893,17 +912,24 @@ export class MediaPlayer {
         
         var contentEl = document.createElement("div");
         _ElementUtilities.addClass(contentEl, ClassNames.mediaPlayer);
+        // TODO: win-mediaplayer-thumbnail had win-mediaplayer-hidden
         // TODO: Why did win-mediaplayer-timeline have class win-mediaplayer-thumbnailmode?
         // TODO: Why does win-mediaplayer-timeline have tabIndex 0?
         contentEl.innerHTML =
             '<div class="' + ClassNames.container + '">' +
                 '<div class="' + ClassNames.controls + '">' +
                     '<div class="' + ClassNames.transportControls + '">' +
-                        '<div class="' + ClassNames.timeline + '" tabIndex="0">' +
+                        '<div class="' + ClassNames.timeline + ' win-mediaplayer-thumbnailmode" tabIndex="0">' +
                             '<div class="' + ClassNames.progressContainer + '">' +
                                 '<div class="' + ClassNames.seekBar + '">' +
                                     '<div class="' + ClassNames.seekProgress + '"></div>' +
                                     '<div class="' + ClassNames.seekBarVisualElementsContainer + '">' +
+                                        '<div class="' + ClassNames.thumbnail + '">' +
+                                            '<div class="' + ClassNames.thumbnailVisual + '">' +
+                                                '<div class="' + ClassNames.playbackSpeedIndicator + '"></div>' +
+                                                '<div class="' + ClassNames.seekTimeIndicator + '"></div>' +
+                                            '</div>' +
+                                        '</div>' +
                                         '<div class="' + ClassNames.seekMark + '"></div>' +
                                     '</div>' +
                                 '</div>' +
@@ -1029,6 +1055,12 @@ export class MediaPlayer {
             seekBarVisualElementsContainer: getElement(ClassNames.seekBarVisualElementsContainer),
             seekProgress: getElement(ClassNames.seekProgress),
             toolBar: toolBar,
+            thumbnail: {
+                playbackSpeedIndicator: getElement(ClassNames.playbackSpeedIndicator),
+                seekTimeIndicator: getElement(ClassNames.seekTimeIndicator),
+                root: getElement(ClassNames.thumbnail),
+                thumbnailVisual: getElement(ClassNames.thumbnailVisual)
+            },
             transportControls: getElement(ClassNames.transportControls)
         };
         
@@ -1049,6 +1081,8 @@ export class MediaPlayer {
         mediaElement: <HTMLMediaElement>undefined,
         playPauseButtonIsPlay: <boolean>undefined,
         isScrubbing: <boolean>undefined,
+        isSkimming: <boolean>undefined,
+        skimmingSpeed: <number>undefined,
         seekBarX: <number>undefined,
         currentTime: <number>undefined
     };
@@ -1121,6 +1155,25 @@ export class MediaPlayer {
                 //this._dom.commands.playPause.label = "Pause";
                 this._dom.commands.playPause.tooltip = "Pause";
                 this._dom.commands.playPause.onclick = this._onCommandPause.bind(this);
+            }
+        }
+        
+        // TODO: Make modes for normal playback, seeking, skimming?
+        // TODO: Update seek bar while skimming (need to update UI and start a timer for updating the time)
+        var isSkimming = this._playbackSpeed !== 0 && this._playbackSpeed !== 1;
+        if (rendered.isSkimming !== isSkimming) {
+            if (isSkimming) {
+                _ElementUtilities.removeClass(this._dom.thumbnail.root, ClassNames.hidden);
+            } else {
+                _ElementUtilities.addClass(this._dom.thumbnail.root, ClassNames.hidden);                
+            }
+            rendered.isSkimming = isSkimming;
+        }
+        
+        if (isSkimming) {
+            if (rendered.skimmingSpeed !== this._playbackSpeed) {
+                this._dom.thumbnail.playbackSpeedIndicator.textContent = Math.abs(this._playbackSpeed) + "X";
+                rendered.skimmingSpeed = this._playbackSpeed;
             }
         }
         
@@ -1307,6 +1360,34 @@ export class MediaPlayer {
             options: captions
         });
         menu.menu.show(<HTMLElement>eventObject.currentTarget, undefined, undefined);
+    }
+    
+    // TODO: Make sure controls don't hide while interacting with
+    //   fast forward and rewind buttons.
+    // TODO: find nicer way to represent this playback speed logic
+    
+    private _onCommandFastForward(eventObject: MouseEvent) {
+        this._playbackSpeed =
+            (this._playbackSpeed === -2) ? 1 :
+            (this._playbackSpeed < -0.5) ? (this._playbackSpeed / 2) :
+            (this._playbackSpeed === -0.5) ? 1 :
+            (this._playbackSpeed === 0) ? 0.5 :
+            (this._playbackSpeed === 0.5) ? 2 :
+            (this._playbackSpeed < 128) ? (this._playbackSpeed * 2) :
+            this._playbackSpeed;;
+        this._updateDomImpl();
+    }
+    
+    private _onCommandRewind(eventObject: MouseEvent) {
+        this._playbackSpeed =
+            (this._playbackSpeed === 1) ? -2 :
+            (this._playbackSpeed > 0.5) ? (this._playbackSpeed / 2) :
+            (this._playbackSpeed === 0.5) ? 1 :
+            (this._playbackSpeed === 0) ? -0.5 :
+            (this._playbackSpeed === -0.5) ? -2 :
+            (this._playbackSpeed > -128) ? (this._playbackSpeed * 2) :
+            this._playbackSpeed;
+        this._updateDomImpl();
     }
 }
 
