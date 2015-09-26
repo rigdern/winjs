@@ -11,10 +11,21 @@
     </style>
     
     <script>
+        function pp(el) {
+            return !el ? "<null>" : [el.id, el.className, el.tagName].join(":");
+        }
+        
         var mp;
         function init() {
             WinJS.UI.processAll().then(function () {
                 mp = document.getElementById("mediaPlayerEl").winControl;
+                var ahc;
+                setInterval(function () {
+                    if (document.activeElement !== ahc) {
+                        ahc = document.activeElement;
+                        console.log("focus: " + pp(ahc));
+                    }
+                }, 0);
             });
         }
         

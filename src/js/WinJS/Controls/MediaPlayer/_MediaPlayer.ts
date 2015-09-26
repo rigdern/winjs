@@ -325,7 +325,10 @@ class MediaElementAdapterWrapper {
         this._mediaElementAdapter = mediaElementAdapter;
     }
     
-    get mediaElement(): HTMLMediaElement {
+    // TODO: Find a better way to prevent MediaPlayer from accidentally accessing
+    //   mediaElement directly. Can easily accidentally get at it with
+    //  this.mediaElementAdapter :(
+    private get _mediaElement(): HTMLMediaElement {
         return this._mediaElementAdapter && this._mediaElementAdapter.mediaElement;
     }
     
@@ -335,6 +338,12 @@ class MediaElementAdapterWrapper {
         //   specially (e.g. make the "play" button click a no-op)
         var mediaElement = this._mediaElementAdapter && this._mediaElementAdapter.mediaElement;
         return mediaElement ? mediaElement.paused : true;
+    }
+    
+    set playbackRate(rate: number) {
+        if (this._mediaElement) {
+            this._mediaElement.playbackRate = rate;
+        }
     }
     
     seek(newTime: number): void {
@@ -351,6 +360,268 @@ class MediaElementAdapterWrapper {
         // TODO: _mediaElement isn't required?
         // TODO: How does _isPlayAllowed fit into this?
         this._mediaElementAdapter && this._mediaElementAdapter.play();
+    }
+}
+
+//
+// PlaybackRate
+//
+
+interface IPlaybackRateState {
+    name: string;
+    
+    enter(args?: any): void;
+    exit(): void;
+    
+    controlsTime: number;
+    controlsRate: number;
+    
+    scrub(time: number): void;
+    endScrub(): void;
+    rewind(): void;
+    fastForward(): void;
+    
+    machine: PlaybackRate;
+}
+
+module PlaybackRateStates {
+    export class Normal implements IPlaybackRateState {
+        machine: PlaybackRate;
+        name = "Normal";
+        
+        enter = _;
+        exit = _;
+        get controlsTime() {
+            return this.machine.time.value;
+        }
+        get controlsRate() {
+            return this.machine.rate;
+        }
+        scrub(time: number): void {
+            this.machine._setState(Scrub, time);
+        }
+        endScrub = _;
+        rewind(): void {
+            this.machine._setState(Rewind);
+        }
+        fastForward(): void {
+            this.machine._setState(FastForward);
+        }
+    }
+    
+    export class Scrub implements IPlaybackRateState {
+        machine: PlaybackRate;
+        name = "Scrub";
+        
+        private _time: number;
+        
+        enter(time?: number): void {
+            this._time = typeof time === "undefined" ? this.machine.time.value : time;
+        }
+        exit(): void {
+        }
+        get controlsTime() {
+            return this._time;
+        }
+        get controlsRate() {
+            return this.machine.rate;
+        }
+        scrub(time: number): void {
+            this._time = time;
+        }
+        endScrub(): void {
+            this.machine.time.value = this._time;
+            this.machine.time.cameFromMediaElement = false;
+            this.machine._setState(Normal);
+        }
+        rewind = _;
+        fastForward = _;
+    }
+    
+    function increaseRate(rate: number) {
+        return rate === 0 ? 0.5 : clamp(0, 128, rate * 2);
+    }
+    
+    function decreaseRate(rate: number) {
+        return rate / 2;
+    }
+    
+    interface IIntervalArgs {
+        interval: number;
+        onFire(elapsed: number): void;
+    }
+    
+    class Interval {
+        private _args: IIntervalArgs;
+        private _previousTime: number;
+        private _intervalToken: number;
+        
+        constructor(args: IIntervalArgs) {
+            this._args = args;
+            this._previousTime = (new Date()).getTime();
+            this._intervalToken = setInterval(this._fire.bind(this), args.interval)
+        }
+        
+        dispose() {
+            clearInterval(this._intervalToken);
+        }
+        
+        private _fire() {
+            var previousTime = this._previousTime;
+            var now = (new Date()).getTime();
+            this._previousTime = now;
+            this._args.onFire(now - previousTime);
+        }
+    }
+    
+    // TODO: Remove duplication between Rewind and FastForward states
+    // TODO: Hitting play/pause button should exit rewind/fastforward
+    
+    export class Rewind implements IPlaybackRateState {
+        machine: PlaybackRate;
+        name = "Rewind";
+        
+        private _time: number;
+        private _rate: number;
+        private _interval: Interval;
+        
+        private _updateTime(elapsed: number) {
+            // TODO: Make sure this doesn't go below startTime
+            this._time -= this._rate * (elapsed / 1000);
+            this.machine._updateDom();
+        }
+        
+        enter(args: {time: number; rate: number}): void {
+            this._time = this.machine.time.value;
+            this._rate = this.machine.rate;
+            this.rewind();
+            this._interval = new Interval({
+                interval: 200,
+                onFire: this._updateTime.bind(this)
+            });
+        }
+        exit(): void {
+            this._interval.dispose();
+        }
+        get controlsTime() {
+            return this._time;
+        }
+        get controlsRate() {
+            return this._rate;
+        }
+        scrub(time: number): void {
+            this.machine._setState(Scrub, time);
+        }
+        endScrub = _;
+        rewind(): void {
+            this._rate = increaseRate(this._rate);
+        }
+        fastForward(): void {
+            if (this._rate === 0.5 || this._rate === 2) {
+                this.machine.time.value = this._time;
+                this.machine._setState(Normal);
+            } else {
+                this._rate = decreaseRate(this._rate);
+            }
+        }
+    }
+    
+    export class FastForward implements IPlaybackRateState {
+        machine: PlaybackRate;
+        name = "FastForward";
+        
+        private _time: number;
+        private _rate: number;
+        private _interval: Interval;
+        
+        private _updateTime(elapsed: number) {
+            // TODO: Make sure this doesn't go above endTime
+            this._time += this._rate * (elapsed / 1000);
+            this.machine._updateDom();
+        }
+        
+        enter(): void {
+            this._time = this.machine.time.value;
+            this._rate = this.machine.rate;
+            this.fastForward();
+            this._interval = new Interval({
+                interval: 200,
+                onFire: this._updateTime.bind(this)
+            });
+        }
+        exit(): void {
+            this._interval.dispose();
+        }
+        get controlsTime() {
+            return this._time;
+        }
+        get controlsRate() {
+            return this._rate;
+        }
+        scrub(time: number): void {
+            this.machine._setState(Scrub, time);
+        }
+        endScrub = _;
+        rewind(): void {
+            if (this._rate === 0.5 || this._rate === 2) {
+                this.machine.time.value = this._time;
+                this.machine._setState(Normal);
+            } else {
+                this._rate = decreaseRate(this._rate);
+            }
+        }
+        fastForward(): void {
+            this._rate = increaseRate(this._rate);
+        }
+    }
+}
+
+// TODO: Rename to Player?
+// TODO: Play/pause vs chosen playback rate
+class PlaybackRate {
+    private _disposed: boolean;
+    private _state: IPlaybackRateState;
+    private _mediaPlayer: MediaPlayer;
+    
+    time: {
+        value: number;
+        // If the media element gave us this value, there's no reason to give this
+        // value back to the media element in updateDom.
+        cameFromMediaElement: boolean;
+    };
+    rate: number;
+    
+    constructor(mediaPlayer: MediaPlayer) {
+        this._mediaPlayer = mediaPlayer;
+        this._setState(PlaybackRateStates.Normal);
+    }
+    
+    get isScrubbing() {
+        return this._state instanceof PlaybackRateStates.Scrub;
+    }
+    
+    get isFFOrRewind() {
+        return this._state instanceof PlaybackRateStates.Rewind || this._state instanceof PlaybackRateStates.FastForward;
+    }
+    
+    get controlsTime() { return this._state.controlsTime; }
+    get controlsRate() { return this._state.controlsRate; }
+    rewind() { this._state.rewind(); }
+    fastForward() { this._state.fastForward(); }
+    scrub(time: number) { this._state.scrub(time); }
+    endScrub() { this._state.endScrub(); }
+    
+    _updateDom() {
+        this._mediaPlayer._updateDomImpl();
+    }
+    
+    _setState(NewState: any, args?: any) {
+        if (!this._disposed) {
+            this._state && this._state.exit();
+            this._state = new NewState();
+            this._state.machine = this;
+            this._state.enter(args);
+        }
     }
 }
 
@@ -501,18 +772,7 @@ export class MediaPlayer {
     };
     private _seekPointerId: number;
     private _registeredSeekPointerEvents: boolean;
-    private _scrubbing: {
-        progress: number;
-    };
-    private _playbackSpeed: number;
-    // TODO: Combine currentTime and progress.
-    private _currentTime: {
-        value: number;
-        // If the media element gave us this value, there's no reason to give this
-        // value back to the media element in updateDom.
-        cameFromMediaElement: boolean;
-    };
-    private _progress: number;
+    private _playbackRate: PlaybackRate;
     
     // Controls management
     private _commandDescriptions: {
@@ -558,13 +818,12 @@ export class MediaPlayer {
         this._initialized = false;
         this._disposed = false;
         this._sizes = null;
-        this._currentTime = {
+        this._playbackRate = new PlaybackRate(this);
+        this._playbackRate.time = {
             value: 0, // TODO: grab this info from media element when metadata is available
             cameFromMediaElement: false
-        };
-        this._playbackSpeed = 0;
-        this._scrubbing = null;
-        this._progress = 0.50;
+        }
+        this._playbackRate.rate = 0; // TODO: grab this info from media element when metadata is available
         this._controlsState = ControlsState.hidden;
         this._autoHider = new AutoHider({
             element: this._dom.root,
@@ -614,8 +873,8 @@ export class MediaPlayer {
     }
     
     seek(time: number): void {
-        this._currentTime.value = time;
-        this._currentTime.cameFromMediaElement = false;
+        this._playbackRate.time.value = time;
+        this._playbackRate.time.cameFromMediaElement = false;
         this._updateDomImpl();
     }
     
@@ -1029,7 +1288,7 @@ export class MediaPlayer {
         var closedCaptionsMenu = new RadioButtonMenu({
             onSelected: (selectedId: any) => {
                 // TODO: updateDom should take care of this?
-                var mediaElement = this._mediaElementAdapter.mediaElement;
+                var mediaElement = this._mediaElementAdapter["_mediaElement"];
                 if (mediaElement) {
                     var textTracks = mediaElement.textTracks;
                     for (var i = 0; i < textTracks.length; i++) {
@@ -1079,47 +1338,23 @@ export class MediaPlayer {
     private _updateDomImpl_rendered = {
         controlsShown: <boolean>undefined,
         mediaElement: <HTMLMediaElement>undefined,
+        mediaTime: <number>undefined,
+        mediaPlaybackRate: <number>undefined,
         playPauseButtonIsPlay: <boolean>undefined,
         isScrubbing: <boolean>undefined,
-        isSkimming: <boolean>undefined,
-        skimmingSpeed: <number>undefined,
-        seekBarX: <number>undefined,
-        currentTime: <number>undefined
+        showThumbnail: <boolean>undefined,
+        thumbnailRate: <number>undefined,
+        seekBarX: <number>undefined
     };
-    private _updateDomImpl(): void {
+    _updateDomImpl(): void {
         if (!this._initialized) {
             return;
         }
         
         var rendered = this._updateDomImpl_rendered;
         
-        var controlsShown = this._controlsState === ControlsState.hiding ||
-            this._controlsState === ControlsState.showing ||
-            this._controlsState === ControlsState.shown; 
-        if (rendered.controlsShown !== controlsShown) {
-            // During initialization (rendered.controlsShown is undefined), skip
-            // the animation
-            // TODO: Cancel current animation when starting a new animation -- don't want
-            //       promise completions running out of order
-            // TODO: Don't do animations inside of updateDom? updateDom shouldn't deal with
-            //       asynchrony to make it easier to reason about?
-            if (controlsShown) {
-                _ElementUtilities.removeClass(this._dom.controls, ClassNames.hidden);
-                if (!this._sizes) {
-                    // TODO: Remeasure on window resize
-                    // TODO: The forceLayout API should also remeasure seekBarTotalWidth
-                    this._sizes = {
-                        seekBarTotalWidth: _ElementUtilities.getTotalWidth(this._dom.seekBar)
-                    };
-                }
-            } else {
-                _ElementUtilities.addClass(this._dom.controls, ClassNames.hidden);       
-            }
-            rendered.controlsShown = controlsShown;
-        }
-        
         // TODO: Can this.mediaElementAdapter be null? Do consumers ever set it to null?
-        var mediaElement = this.mediaElementAdapter.mediaElement;
+        var mediaElement = this._mediaElementAdapter["_mediaElement"];
         
         if (rendered.mediaElement !== mediaElement) {
             if (rendered.mediaElement) {
@@ -1134,74 +1369,107 @@ export class MediaPlayer {
             rendered.mediaElement = mediaElement;
         }
         
-        // TODO: How should we determine which state we're in? Reading from media element adapter
-        //   is like reading from DOM so not too good. We want the control to track its own state.
-        // TODO: How do we get informed that this._mediaElementAdapter.paused has changed and our
-        //   UI is stale? No telling when custom MediaPlayerAdapter might decide to mutate media
-        //   element... Is media element the source of truth? If somebody clicks "play", do we
-        //   immediately switch to the "playing" UI even though media element might not have
-        //   started playing yet?
-        var playPauseButtonIsPlay = this._mediaElementAdapter.paused;
-        if (rendered.playPauseButtonIsPlay !== playPauseButtonIsPlay) {
-            if (playPauseButtonIsPlay) {
-                this._dom.commands.playPause.icon = "play";
-                // TODO: Can't set label because it'll prevent the tooltip from showing
-                //this._dom.commands.playPause.label = Strings.mediaPlayerPlayButtonLabel;
-                this._dom.commands.playPause.tooltip = Strings.mediaPlayerPlayButtonLabel;
-                this._dom.commands.playPause.onclick = this._onCommandPlay.bind(this);
+        var mediaPlaybackRate = this._playbackRate.isFFOrRewind ? 0 : this._playbackRate.rate;
+        var isPaused = mediaPlaybackRate === 0;
+        if (rendered.mediaPlaybackRate !== mediaPlaybackRate) {
+            this._mediaElementAdapter.playbackRate = mediaPlaybackRate;
+            rendered.mediaPlaybackRate = mediaPlaybackRate;
+        }
+        
+        if (rendered.mediaTime !== this._playbackRate.time.value) {
+            if (!this._playbackRate.time.cameFromMediaElement) {
+                this.mediaElementAdapter.seek(this._playbackRate.time.value);
+            }
+            rendered.mediaTime = this._playbackRate.time.value;
+        }
+        
+        var controlsShown = this._controlsState === ControlsState.hiding ||
+            this._controlsState === ControlsState.showing ||
+            this._controlsState === ControlsState.shown; 
+        if (rendered.controlsShown !== controlsShown) {
+            // During initialization (rendered.controlsShown is undefined), skip
+            // the animation
+            // TODO: Cancel current animation when starting a new animation -- don't want
+            //       promise completions running out of order
+            // TODO: Don't do animations inside of updateDom? updateDom shouldn't deal with
+            //       asynchrony to make it easier to reason about?
+            if (controlsShown) {
+                _ElementUtilities.removeClass(this._dom.controls, ClassNames.hidden);
             } else {
-                this._dom.commands.playPause.icon = "pause";
-                // TODO: Can't set label because it'll prevent the tooltip from showing
-                //this._dom.commands.playPause.label = "Pause";
-                this._dom.commands.playPause.tooltip = "Pause";
-                this._dom.commands.playPause.onclick = this._onCommandPause.bind(this);
+                _ElementUtilities.addClass(this._dom.controls, ClassNames.hidden);       
             }
+            rendered.controlsShown = controlsShown;
         }
         
-        // TODO: Make modes for normal playback, seeking, skimming?
-        // TODO: Update seek bar while skimming (need to update UI and start a timer for updating the time)
-        var isSkimming = this._playbackSpeed !== 0 && this._playbackSpeed !== 1;
-        if (rendered.isSkimming !== isSkimming) {
-            if (isSkimming) {
-                _ElementUtilities.removeClass(this._dom.thumbnail.root, ClassNames.hidden);
-            } else {
-                _ElementUtilities.addClass(this._dom.thumbnail.root, ClassNames.hidden);                
+        if (controlsShown) {
+            if (!this._sizes) {
+                // TODO: Remeasure on window resize
+                // TODO: The forceLayout API should also remeasure seekBarTotalWidth
+                this._sizes = {
+                    seekBarTotalWidth: _ElementUtilities.getTotalWidth(this._dom.seekBar)
+                };
             }
-            rendered.isSkimming = isSkimming;
-        }
-        
-        if (isSkimming) {
-            if (rendered.skimmingSpeed !== this._playbackSpeed) {
-                this._dom.thumbnail.playbackSpeedIndicator.textContent = Math.abs(this._playbackSpeed) + "X";
-                rendered.skimmingSpeed = this._playbackSpeed;
+            
+            // TODO: How should we determine which state we're in? Reading from media element adapter
+            //   is like reading from DOM so not too good. We want the control to track its own state.
+            // TODO: How do we get informed that this._mediaElementAdapter.paused has changed and our
+            //   UI is stale? No telling when custom MediaPlayerAdapter might decide to mutate media
+            //   element... Is media element the source of truth? If somebody clicks "play", do we
+            //   immediately switch to the "playing" UI even though media element might not have
+            //   started playing yet?
+            if (rendered.playPauseButtonIsPlay !== isPaused) {
+                if (isPaused) {
+                    this._dom.commands.playPause.icon = "play";
+                    // TODO: Can't set label because it'll prevent the tooltip from showing
+                    //this._dom.commands.playPause.label = Strings.mediaPlayerPlayButtonLabel;
+                    this._dom.commands.playPause.tooltip = Strings.mediaPlayerPlayButtonLabel;
+                    this._dom.commands.playPause.onclick = this._onCommandPlay.bind(this);
+                } else {
+                    this._dom.commands.playPause.icon = "pause";
+                    // TODO: Can't set label because it'll prevent the tooltip from showing
+                    //this._dom.commands.playPause.label = "Pause";
+                    this._dom.commands.playPause.tooltip = "Pause";
+                    this._dom.commands.playPause.onclick = this._onCommandPause.bind(this);
+                }
+                rendered.playPauseButtonIsPlay = isPaused;
             }
-        }
-        
-        var isScrubbing = !!this._scrubbing;
-        
-        var progress = isScrubbing ? this._scrubbing.progress : this._progress;
-        var seekBarX = progress * this._sizes.seekBarTotalWidth;
-        if (rendered.seekBarX !== seekBarX) {
-            // TODO: Seek head hangs off of right side of seek track when it reaches end of video
-            this._dom.seekProgress.style[transformNames.scriptName] = "scaleX(" + progress + ")";
-            this._dom.seekBarVisualElementsContainer.style[transformNames.scriptName] = "translateX(" + seekBarX + "px)";
-            rendered.seekBarX = seekBarX;
-        }
-        
-        if (rendered.currentTime !== this._currentTime.value) {
-            if (!this._currentTime.cameFromMediaElement) {
-                this.mediaElementAdapter.seek(this._currentTime.value);
+            
+            if (rendered.isScrubbing !== this._playbackRate.isScrubbing) {
+                if (this._playbackRate.isScrubbing) {
+                    _ElementUtilities.addClass(this._dom.root, ClassNames.scrubbing);
+                } else {
+                    _ElementUtilities.removeClass(this._dom.root, ClassNames.scrubbing);
+                }
+                rendered.isScrubbing = this._playbackRate.isScrubbing;
             }
-            rendered.currentTime = this._currentTime.value;
-        }
-        
-        if (rendered.isScrubbing !== isScrubbing) {
-            if (isScrubbing) {
-                _ElementUtilities.addClass(this._dom.root, ClassNames.scrubbing);
-            } else {
-                _ElementUtilities.removeClass(this._dom.root, ClassNames.scrubbing);
+            
+            // TODO: Make modes for normal playback, seeking, skimming?
+            // TODO: Update seek bar while skimming (need to update UI and start a timer for updating the time)
+            var showThumbnail = this._playbackRate.isFFOrRewind;
+            if (rendered.showThumbnail !== showThumbnail) {
+                if (showThumbnail) {
+                    _ElementUtilities.removeClass(this._dom.thumbnail.root, ClassNames.hidden);
+                } else {
+                    _ElementUtilities.addClass(this._dom.thumbnail.root, ClassNames.hidden);                
+                }
+                rendered.showThumbnail = showThumbnail;
             }
-            rendered.isScrubbing = isScrubbing;
+            
+            if (showThumbnail) {
+                if (rendered.thumbnailRate !== this._playbackRate.controlsRate) {
+                    this._dom.thumbnail.playbackSpeedIndicator.textContent = this._playbackRate.controlsRate + "X";
+                    rendered.thumbnailRate = this._playbackRate.controlsRate;
+                }
+            }
+            
+            var percentProgress = this._timeToPercent(this._playbackRate.controlsTime);
+            var seekBarX = percentProgress * this._sizes.seekBarTotalWidth;
+            if (rendered.seekBarX !== seekBarX) {
+                // TODO: Seek head hangs off of right side of seek track when it reaches end of video
+                this._dom.seekProgress.style[transformNames.scriptName] = "scaleX(" + percentProgress + ")";
+                this._dom.seekBarVisualElementsContainer.style[transformNames.scriptName] = "translateX(" + seekBarX + "px)";
+                rendered.seekBarX = seekBarX;
+            }
         }
 	}
     
@@ -1239,9 +1507,7 @@ export class MediaPlayer {
     
     private _onSeekPointerDown(eventObject: PointerEvent) {
         this._seekPointerId = eventObject.pointerId;
-        this._scrubbing = {
-            progress: this._seekPointerEventToPercent(eventObject)
-        };
+        this._playbackRate.scrub(this._percentToTime(this._seekPointerEventToPercent(eventObject)));
         if (!this._registeredSeekPointerEvents) {
             _ElementUtilities._globalListener.addEventListener(this._dom.root, "pointermove", this._onSeekPointerMove);
             _ElementUtilities._globalListener.addEventListener(this._dom.root, "pointerup", this._onSeekPointerUp);
@@ -1255,7 +1521,7 @@ export class MediaPlayer {
         var eventObject = wrappedEventObject.detail.originalEvent;
         if (eventObject.pointerId === this._seekPointerId) {
             eventObject.preventDefault(); // Prevent text selection
-            this._scrubbing.progress = this._seekPointerEventToPercent(eventObject);
+            this._playbackRate.scrub(this._percentToTime(this._seekPointerEventToPercent(eventObject)));
             this._updateDomImpl();
         }
     }
@@ -1263,9 +1529,7 @@ export class MediaPlayer {
     private _onSeekPointerUp(wrappedEventObject: _ElementUtilities.IGenericListenerEvent<PointerEvent>) {
         var eventObject = wrappedEventObject.detail.originalEvent;
         if (eventObject.pointerId === this._seekPointerId) {
-            this._progress = this._scrubbing.progress;
-            this._currentTime.value = this._percentToTime(this._progress);
-            this._currentTime.cameFromMediaElement = false;
+            this._playbackRate.scrub(this._percentToTime(this._seekPointerEventToPercent(eventObject)));
             this._resetSeekPointerState();
             this._updateDomImpl();
         }
@@ -1274,17 +1538,20 @@ export class MediaPlayer {
     private _onSeekPointerCancel(wrappedEventObject: _ElementUtilities.IGenericListenerEvent<PointerEvent>) {
         var eventObject = wrappedEventObject.detail.originalEvent;
         if (eventObject.pointerId === this._seekPointerId) {
-            this._progress = this._scrubbing.progress;
-            this._currentTime.value = this._percentToTime(this._progress);
-            this._currentTime.cameFromMediaElement = false;
+            this._playbackRate.scrub(this._percentToTime(this._seekPointerEventToPercent(eventObject)));
             this._resetSeekPointerState();
             this._updateDomImpl();
         }
     }
     
+    private _timeToPercent(time: number): number {
+        // TODO: What about startTime and endTime?
+        return time / this._mediaElementAdapter["_mediaElement"].duration;
+    }
+    
     private _percentToTime(percent: number): number {
         // TODO: What about startTime and endTime?
-        return percent * this._mediaElementAdapter.mediaElement.duration;
+        return percent * this._mediaElementAdapter["_mediaElement"].duration;
     }
     
     private _seekPointerEventToPercent(eventObject: PointerEvent) {
@@ -1303,7 +1570,7 @@ export class MediaPlayer {
             this._registeredSeekPointerEvents = false;
         }
         this._seekPointerId = null;
-        this._scrubbing = null;
+        this._playbackRate.endScrub();
         this._updateDomImpl();
     }
     
@@ -1338,7 +1605,7 @@ export class MediaPlayer {
         // TODO: Don't repeat this logic here and in onSelected?
         var captions: { id: any; label: string }[] = [];
         var selectedId: any = null;
-        var mediaElement = this._mediaElementAdapter.mediaElement;
+        var mediaElement = this._mediaElementAdapter["_mediaElement"];
         if (mediaElement) {
             var textTracks = mediaElement.textTracks;
             for (var i = 0; i < textTracks.length; i++) {
@@ -1367,26 +1634,12 @@ export class MediaPlayer {
     // TODO: find nicer way to represent this playback speed logic
     
     private _onCommandFastForward(eventObject: MouseEvent) {
-        this._playbackSpeed =
-            (this._playbackSpeed === -2) ? 1 :
-            (this._playbackSpeed < -0.5) ? (this._playbackSpeed / 2) :
-            (this._playbackSpeed === -0.5) ? 1 :
-            (this._playbackSpeed === 0) ? 0.5 :
-            (this._playbackSpeed === 0.5) ? 2 :
-            (this._playbackSpeed < 128) ? (this._playbackSpeed * 2) :
-            this._playbackSpeed;;
+        this._playbackRate.fastForward();
         this._updateDomImpl();
     }
     
     private _onCommandRewind(eventObject: MouseEvent) {
-        this._playbackSpeed =
-            (this._playbackSpeed === 1) ? -2 :
-            (this._playbackSpeed > 0.5) ? (this._playbackSpeed / 2) :
-            (this._playbackSpeed === 0.5) ? 1 :
-            (this._playbackSpeed === 0) ? -0.5 :
-            (this._playbackSpeed === -0.5) ? -2 :
-            (this._playbackSpeed > -128) ? (this._playbackSpeed * 2) :
-            this._playbackSpeed;
+        this._playbackRate.rewind();
         this._updateDomImpl();
     }
 }
